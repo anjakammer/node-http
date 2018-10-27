@@ -35,7 +35,7 @@ function registerCheckRun (payload) {
 
     return registerCheck.run().then((result) => {
       console.log(result.toString())
-      next()
+      return next()
     })
   })
 }
@@ -57,7 +57,7 @@ function runCheckSuite (payload) {
       end.env.CHECK_SUMMARY = `Job:${check} completed`
       end.env.CHECK_TEXT = result.toString() + 'where am I?'
       return end.run().then(() => {
-        next()
+        return next()
       })
     }).catch((err) => {
       end.env.CHECK_CONCLUSION = 'failed'
