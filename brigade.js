@@ -24,14 +24,14 @@ function registerCheckRun (payload) {
   eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
-    const registerCheck = new Job(`register-${check}-job`, checkRunImage)
+    const registerCheck = new Job(`register-${check}-job`.toLocaleLowerCase(), checkRunImage)
     registerCheck.imageForcePull = true
     registerCheck.env = {
       CHECK_PAYLOAD: payload,
       CHECK_NAME: check,
       CHECK_TITLE: 'Description'
     }
-    registerCheck.env.CHECK_SUMMARY = `Job:${check} scheduled`
+    registerCheck.env.CHECK_SUMMARY = `Job:${check} scheduled`.toLocaleLowerCase()
 
     return registerCheck.run().then((result) => {
       console.log(result.toString())
@@ -43,9 +43,9 @@ function registerCheckRun (payload) {
 function runCheck (payload) {
   eachSeries(stages, (check, next) => {
     console.log(`run-${check}-job`)
-    const runCheck = new Job(check, 'alpine:3.7', ['sleep 60', 'echo hello'])
+    const runCheck = new Job(check.toLocaleLowerCase(), 'alpine:3.7', ['sleep 60', 'echo hello'])
 
-    const end = new Job(`assert-result-of-${check}-job`, checkRunImage)
+    const end = new Job(`assert-result-of-${check}-job`.toLocaleLowerCase(), checkRunImage)
     end.imageForcePull = true
     end.env = {
       CHECK_PAYLOAD: payload,
