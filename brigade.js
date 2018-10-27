@@ -11,13 +11,10 @@ events.on('check_run:rerequested', checkRequested)
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
-  registerCheckRun(e.payload).then(() => {
-    return runCheckSuite(e.payload)
-  }).then(() => {
-    console.log('Finished Check-Suite')
-  }).catch((err) => {
-    console.log(err)
-  })
+  registerCheckRun(e.payload)
+    .then(() => { return runCheckSuite(e.payload) })
+    .then(() => { return console.log('Finished Check-Suite') })
+    .catch((err) => { console.log(err) })
 }
 
 function registerCheckRun (payload) {
@@ -33,10 +30,9 @@ function registerCheckRun (payload) {
     }
     registerCheck.env.CHECK_SUMMARY = `${check} scheduled`
 
-    return registerCheck.run().then((result) => {
-      console.log(result.toString())
-      return next()
-    })
+    return registerCheck.run()
+      .then(() => { return next() })
+      .catch(err => { console.log(err) })
   })
 }
 
@@ -52,19 +48,21 @@ function runCheckSuite (payload) {
       CHECK_NAME: check,
       CHECK_TITLE: 'Description'
     }
-    return runCheck.run().then((result) => {
-      end.env.CHECK_CONCLUSION = 'success'
-      end.env.CHECK_SUMMARY = `Job:${check} completed`
-      end.env.CHECK_TEXT = result.toString() + 'where am I?'
-      return end.run().then(() => {
-        return next()
+    return runCheck.run()
+      .then((result) => {
+        end.env.CHECK_CONCLUSION = 'success'
+        end.env.CHECK_SUMMARY = `Job:${check} completed`
+        end.env.CHECK_TEXT = result.toString() + 'where am I?'
+        return end.run()
+          .then(() => { return next() })
+          .catch(err => { console.log(err) })
       })
-    }).catch((err) => {
-      end.env.CHECK_CONCLUSION = 'failed'
-      end.env.CHECK_SUMMARY = `Job:${check} failed`
-      end.env.CHECK_TEXT = `Error: ${err}`
-      return end.run()
-    })
+      .catch((err) => {
+        end.env.CHECK_CONCLUSION = 'failed'
+        end.env.CHECK_SUMMARY = `Job:${check} failed`
+        end.env.CHECK_TEXT = `Error: ${err}`
+        return end.run()
+      })
   })
 }
 
