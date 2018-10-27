@@ -3,6 +3,7 @@ const eachSeries = require('async/eachSeries')
 
 const checkRunImage = 'technosophos/brigade-github-check-run:latest'
 const stages = ['Build', 'Test', 'Deploy']
+console.log('Debug log: it is:' + Date.now().getTime())
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
