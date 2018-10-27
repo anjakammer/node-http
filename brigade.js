@@ -11,8 +11,8 @@ events.on('check_run:rerequested', checkRequested)
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
-  this.registerCheckRun(e.payload).then(() => {
-    return this.runCheck(e.payload)
+  registerCheckRun(e.payload).then(() => {
+    return runCheck(e.payload)
   }).then(() => {
     console.log('Finished Check-Suite')
   }).catch((err) => {
@@ -20,7 +20,7 @@ function checkRequested (e, p) {
   })
 }
 
-exports.registerCheckRun = (payload) => {
+function registerCheckRun (payload) {
   eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
@@ -40,7 +40,7 @@ exports.registerCheckRun = (payload) => {
   })
 }
 
-exports.runCheck = (payload) => {
+function runCheck (payload) {
   eachSeries(stages, (check, next) => {
     console.log(`run-${check}`)
     const runCheck = new Job(check, 'alpine:3.7', ['sleep 60', 'echo hello'])
@@ -66,3 +66,5 @@ exports.runCheck = (payload) => {
     })
   })
 }
+
+module.exports = {registerCheckRun, runCheck}
