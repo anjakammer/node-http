@@ -12,7 +12,7 @@ function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
   registerCheckRun(e.payload).then(() => {
-    return runCheck(e.payload)
+    return runCheckSuite(e.payload)
   }).then(() => {
     console.log('Finished Check-Suite')
   }).catch((err) => {
@@ -24,14 +24,14 @@ function registerCheckRun (payload) {
   eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
-    const registerCheck = new Job(`register-${check}-job`.toLocaleLowerCase(), checkRunImage)
+    const registerCheck = new Job(`register-${check}`.toLocaleLowerCase(), checkRunImage)
     registerCheck.imageForcePull = true
     registerCheck.env = {
       CHECK_PAYLOAD: payload,
       CHECK_NAME: check,
       CHECK_TITLE: 'Description'
     }
-    registerCheck.env.CHECK_SUMMARY = `Job:${check} scheduled`.toLocaleLowerCase()
+    registerCheck.env.CHECK_SUMMARY = `${check} scheduled`
 
     return registerCheck.run().then((result) => {
       console.log(result.toString())
@@ -40,9 +40,9 @@ function registerCheckRun (payload) {
   })
 }
 
-function runCheck (payload) {
+function runCheckSuite (payload) {
   eachSeries(stages, (check, next) => {
-    console.log(`run-${check}-job`)
+    console.log(`run-${check}`)
     const runCheck = new Job(check.toLocaleLowerCase(), 'alpine:3.7', ['sleep 60', 'echo hello'])
 
     const end = new Job(`assert-result-of-${check}-job`.toLocaleLowerCase(), checkRunImage)
@@ -56,8 +56,9 @@ function runCheck (payload) {
       end.env.CHECK_CONCLUSION = 'success'
       end.env.CHECK_SUMMARY = `Job:${check} completed`
       end.env.CHECK_TEXT = result.toString() + 'where am I?'
-      end.run()
-      next()
+      return end.run().then(() => {
+        next()
+      })
     }).catch((err) => {
       end.env.CHECK_CONCLUSION = 'failed'
       end.env.CHECK_SUMMARY = `Job:${check} failed`
@@ -67,4 +68,4 @@ function runCheck (payload) {
   })
 }
 
-module.exports = {registerCheckRun, runCheck}
+module.exports = {registerCheckRun, runCheckSuite}
