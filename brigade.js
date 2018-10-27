@@ -21,7 +21,7 @@ function checkRequested (e, p) {
 }
 
 function registerCheckRun (payload) {
-  eachSeries(stages, (check, next) => {
+  return eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
     const registerCheck = new Job(`register-${check}`.toLocaleLowerCase(), checkRunImage)
@@ -41,7 +41,7 @@ function registerCheckRun (payload) {
 }
 
 function runCheckSuite (payload) {
-  eachSeries(stages, (check, next) => {
+  return eachSeries(stages, (check, next) => {
     console.log(`run-${check}`)
     const runCheck = new Job(check.toLocaleLowerCase(), 'alpine:3.7', ['sleep 60', 'echo hello'])
 
