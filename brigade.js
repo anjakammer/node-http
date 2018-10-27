@@ -4,11 +4,11 @@ const eachSeries = require('async/eachSeries')
 const checkRunImage = 'technosophos/brigade-github-check-run:latest'
 const stages = ['Build', 'Test', 'Deploy']
 
-events.on('check_suite:requested', this.checkRequested)
-events.on('check_suite:rerequested', this.checkRequested)
-events.on('check_run:rerequested', this.checkRequested)
+events.on('check_suite:requested', checkRequested)
+events.on('check_suite:rerequested', checkRequested)
+events.on('check_run:rerequested', checkRequested)
 
-exports.checkRequested = (e, p) => {
+function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
   this.registerCheckRun(e.payload).then(() => {
