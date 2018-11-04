@@ -1,4 +1,4 @@
-const {events, Job} = require('brigadier')
+const { events, Job } = require('brigadier')
 const eachSeries = require('async/eachSeries')
 
 const checkRunImage = 'technosophos/brigade-github-check-run:latest'
@@ -40,7 +40,7 @@ function registerCheckSuite (payload) {
 function runCheckSuite (payload) {
   return eachSeries(stages, (check, next) => {
     console.log(`run-${check}`)
-    const runCheck = new Job(check.toLocaleLowerCase(), 'alpine:3.7', ['sleep 60', 'echo hello'])
+    const runCheck = new Job(check.toLocaleLowerCase(), 'alpine:3.7', ['sleep 60', 'echo awesome useful logs'])
 
     const assertResult = new Job(`assert-result-of-${check}-job`.toLocaleLowerCase(), checkRunImage)
     assertResult.imageForcePull = true
@@ -52,19 +52,19 @@ function runCheckSuite (payload) {
     return runCheck.run()
       .then((result) => {
         assertResult.env.CHECK_CONCLUSION = 'success'
-        assertResult.env.CHECK_SUMMARY = `Job:${check} completed`
-        assertResult.env.CHECK_TEXT = result.toString() + 'where am I?'
+        assertResult.env.CHECK_SUMMARY = `${check} completed`
+        assertResult.env.CHECK_TEXT = result.toString()
         return assertResult.run()
           .then(() => { return next() })
           .catch(err => { console.log(err) })
       })
       .catch((err) => {
         assertResult.env.CHECK_CONCLUSION = 'failed'
-        assertResult.env.CHECK_SUMMARY = `Job:${check} failed`
+        assertResult.env.CHECK_SUMMARY = `${check} failed`
         assertResult.env.CHECK_TEXT = `Error: ${err}`
         return assertResult.run()
       })
   })
 }
 
-module.exports = {registerCheckSuite, runCheckSuite}
+module.exports = { registerCheckSuite, runCheckSuite }
