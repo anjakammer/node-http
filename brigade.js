@@ -59,25 +59,20 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 
 async function runCheckSuite (payload, secrets) {
   const commit = JSON.parse(payload).body
-  const imageName = commit.repository.full_name
   const appName = commit.repository.name
+  const repoName = secrets.buildRepoName
   const imageTag = commit.check_suite.head_sha
-  const env = {
-    'DOCKER_USERNAME': secrets.dockerUsername,
-    'DOCKER_PASSWORD': secrets.dockerPassword,
-    'DOCKER_AUTH': secrets.dockerAuth
-  }
+  // const imageName = commit.repository.full_name
+  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
 
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
-  build.env = env
   build.args = [
-    `-d=gcr.io/${imageName}:${imageTag}`,
+    `-d=${imageName}`,
     '-c=/src'
   ]
 
-  const test = new Job(testStage.toLowerCase(), `gcr.io/${imageName}:${imageTag}`)
+  const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
-  test.env = env
   test.tasks = [
     `echo "Running Tests"`,
     'npm test'
@@ -85,8 +80,8 @@ async function runCheckSuite (payload, secrets) {
 
   const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
   deploy.tasks = [
-    `echo "Deploying ${imageName}:${imageTag}"`,
-    `kubectl run ${appName} --image=${imageName}:${imageTag} --port=80 -n preview`,
+    `echo "Deploying ${appName}:${imageTag}"`,
+    `kubectl run ${appName} --image=${imageName} --port=80 -n preview`,
     'cd /src/manifest',
     `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
     `sed 's/app-name/${appName}/g' ingress.yaml"`,
@@ -94,7 +89,7 @@ async function runCheckSuite (payload, secrets) {
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
     'sleep 30',
-    `echo "Status of ${imageName}:${imageTag}:"`,
+    `echo "Status of ${appName}:${imageTag}:"`,
     `kubectl get service/${appName} -n preview`
   ]
 
