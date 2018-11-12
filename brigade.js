@@ -71,9 +71,8 @@ async function runCheckSuite (payload, secrets) {
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
   build.env = env
   build.args = [
-    `-d=${imageName}:${imageTag}`,
-    '-c=/src',
-    `-d=gcr.io/${imageName}:${imageTag}`
+    `-d=gcr.io/${imageName}:${imageTag}`,
+    '-c=/src'
   ]
 
   const test = new Job(testStage.toLowerCase(), `gcr.io/${imageName}:${imageTag}`)
