@@ -83,37 +83,37 @@ async function runCheckSuite (payload, secrets) {
   deploy.serviceAccount = 'anya-deployer'
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
-    `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --port=80 -n preview`,
-    'll',
-    'cd /src/manifest',
-    `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
-    `sed 's/app-name/${appName}/g' ingress.yaml"`,
-    `sed 's/app-name/${appName}/g' service.yaml"`,
-    'kubectl apply -f service.yaml -n preview',
-    'kubectl apply -f ingress.yaml -n preview',
-    'sleep 20',
-    `echo "Status of ${appName}:${imageTag}:"`,
-    `kubectl get service/${appName} -n preview`
+    // `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --port=80 -n preview`,
+    'cd /src',
+    'ls'//,
+    // `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
+    // `sed 's/app-name/${appName}/g' ingress.yaml"`,
+    // `sed 's/app-name/${appName}/g' service.yaml"`,
+    // 'kubectl apply -f service.yaml -n preview',
+    // 'kubectl apply -f ingress.yaml -n preview',
+    // 'sleep 20',
+    // `echo "Status of ${appName}:${imageTag}:"`,
+    // `kubectl get service/${appName} -n preview`
   ]
 
   let result
 
-  try {
-    result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  }
-
-  try {
-    result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  }
+  // try {
+  //   result = await build.run()
+  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+  // } catch (err) {
+  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
+  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  // }
+  //
+  // try {
+  //   result = await test.run()
+  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+  // } catch (err) {
+  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  // }
 
   try {
     result = await deploy.run()
