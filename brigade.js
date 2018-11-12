@@ -90,7 +90,7 @@ async function runCheckSuite (payload, secrets) {
     `sed 's/app-name/${appName}/g' service.yaml"`,
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
-    'sleep 30',
+    'sleep 20',
     `echo "Status of ${appName}:${imageTag}:"`,
     `kubectl get service/${appName} -n preview`
   ]
