@@ -4,7 +4,7 @@ metadata:
   name: app-name
 spec:
   selector:
-    app: app-name
+    app: appName-imageTag-preview
   ports:
   - protocol: TCP
     port: 80
