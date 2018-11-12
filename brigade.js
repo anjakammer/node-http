@@ -116,7 +116,7 @@ async function runCheckSuite (payload, secrets) {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
   } catch (err) {
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: true, payload })
+    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
 }
 
