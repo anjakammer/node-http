@@ -83,7 +83,7 @@ async function runCheckSuite (payload, secrets) {
   deploy.serviceAccount = 'anya-deployer'
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
-    `kubectl run ${appName}-${imageTag} --image=${imageName} --port=80 -n preview`,
+    `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --port=80 -n preview`,
     'll',
     'cd /src/manifest',
     `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
