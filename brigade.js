@@ -84,7 +84,7 @@ async function runCheckSuite (payload, secrets) {
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
     // `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --port=80 -n preview`,
-    'cd /src',
+    'cd /src/manifest',
     'ls'//,
     // `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
     // `sed 's/app-name/${appName}/g' ingress.yaml"`,
