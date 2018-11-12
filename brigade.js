@@ -62,8 +62,8 @@ async function runCheckSuite (payload, secrets) {
   const appName = commit.repository.name
   const repoName = secrets.buildRepoName
   const imageTag = commit.check_suite.head_sha
-  // const imageName = commit.repository.full_name
   const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
+  // const imageName = commit.repository.full_name
 
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
   build.args = [
