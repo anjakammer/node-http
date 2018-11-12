@@ -80,19 +80,19 @@ async function runCheckSuite (payload, secrets) {
 
   const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
   deploy.privileged = true
-  deploy.serviceAccount = 'preview:default'
+  // deploy.serviceAccount = 'anya-deployer' // todo
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
-    `kubectl run ${appName} --image=${imageName} --port=80 -n preview`,
+    `kubectl run ${appName} --image=${imageName} --port=80`, // -n preview
     'cd /src/manifest',
     `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
     `sed 's/app-name/${appName}/g' ingress.yaml"`,
     `sed 's/app-name/${appName}/g' service.yaml"`,
-    'kubectl apply -f service.yaml -n preview',
-    'kubectl apply -f ingress.yaml -n preview',
+    'kubectl apply -f service.yaml', // -n preview
+    'kubectl apply -f ingress.yaml', // -n preview
     'sleep 30',
     `echo "Status of ${appName}:${imageTag}:"`,
-    `kubectl get service/${appName} -n preview`
+    `kubectl get service/${appName}` // -n preview
   ]
 
   let result
