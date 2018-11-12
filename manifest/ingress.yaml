@@ -5,6 +5,10 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
+  tls:
+  - hosts:
+    - test.anya.run
+    secretName: anya-tls
   rules:
   - host: test.anya.run
     http:
