@@ -17,7 +17,7 @@ function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
   registerCheckSuite(e.payload)
-  runCheckSuite(e.payload, p.secrets)
+  runCheckSuite(JSON.parse(e.payload), p.secrets)
     .then(() => { return console.log('Finished Check-Suite') })
     .catch((err) => { console.log(err) })
 }
@@ -58,12 +58,11 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 }
 
 async function runCheckSuite (payload, secrets) {
-  const commit = JSON.parse(payload).body
-  const appName = commit.repository.name
+  const appName = payload.body.repository.name
   const repoName = secrets.buildRepoName
-  const imageTag = commit.check_suite.head_sha
+  const imageTag = payload.body.check_suite.head_sha
   const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
-  // const imageName = commit.repository.full_name
+  // const imageName = payload.body.repository.full_name
 
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
   build.args = [
@@ -93,16 +92,27 @@ async function runCheckSuite (payload, secrets) {
     `kubectl get service/${appName} -n preview`
   ]
 
-  let result
-
-  try {
-    result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  const prCommenter = new Job(buildStage.toLowerCase(), 'anjakammer/brigade-pr-comment')
+  const previewUrl = `${secrets.hostName}/preview/${imageTag}`
+  prCommenter.env = {
+    APP_NAME: 'Anya-test',
+    WAIT_MS: 0,
+    COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
+    PAYLOAD: payload.body,
+    TOKEN: payload.token
   }
+  prCommenter.run()
+
+  // let result
+
+  // try {
+  //   result = await build.run()
+  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+  // } catch (err) {
+  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
+  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  // }
 
   // try {
   //   result = await test.run()
@@ -112,12 +122,12 @@ async function runCheckSuite (payload, secrets) {
   //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
   // }
 
-  try {
-    result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
-  }
+  // try {
+  //   result = await deploy.run()
+  //   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+  // } catch (err) {
+  //   return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
+  // }
 }
 
 module.exports = { registerCheckSuite, runCheckSuite, sendSignal }
