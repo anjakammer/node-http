@@ -87,7 +87,7 @@ async function runCheckSuite (payload, secrets) {
     'cd /src/manifest',
     `sed -i -e 's/previewPath/${imageTag}/g' -e 's/app-name/${appName}/g' ingress.yaml`,
     `sed -i -e 's/app-name/${appName}/g' service.yaml`,
-    'kubectl apply -f service.yaml -n preview'//,
+    'kubectl apply -f service.yaml -n preview'// ,
     // 'kubectl apply -f ingress.yaml -n preview',
     // `echo "Status of ${appName}:${imageTag}:"`,
     // `kubectl get service/${appName} -n preview`
