@@ -1,0 +1,15 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: app-name-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: test.anya.run
+    http:
+      paths:
+      - path: /preview/previewPath
+        backend:
+          serviceName: app-name
+          servicePort: 80

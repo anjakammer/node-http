@@ -60,6 +60,7 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 async function runCheckSuite (payload, secrets) {
   const commit = JSON.parse(payload).body
   const imageName = commit.repository.full_name
+  const appName = commit.repository.name
   const imageTag = commit.check_suite.head_sha
   const env = {
     'DOCKER_USERNAME': secrets.dockerUsername,
@@ -72,17 +73,31 @@ async function runCheckSuite (payload, secrets) {
   build.args = [
     `-d=${imageName}:${imageTag}`,
     '-c=/src',
-    '--no-push'
+    `-d=gcr.io/${imageName}:${imageTag}`
   ]
 
-  const test = new Job(testStage.toLowerCase(), `anjakammer/node-http:12345`)
+  const test = new Job(testStage.toLowerCase(), `gcr.io/${imageName}:${imageTag}`)
+  test.imageForcePull = true
   test.env = env
   test.tasks = [
     `echo "Running Tests"`,
     'npm test'
   ]
 
-  const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl', ['kubectl get pods -n anya'])
+  const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
+  deploy.tasks = [
+    `echo "Deploying ${imageName}:${imageTag}"`,
+    `kubectl run ${appName} --image=${imageName}:${imageTag} --port=80 -n preview`,
+    'cd /src/manifest',
+    `sed 's/previewPath/${imageTag}/g' ingress.yaml"`,
+    `sed 's/app-name/${appName}/g' ingress.yaml"`,
+    `sed 's/app-name/${appName}/g' service.yaml"`,
+    'kubectl apply -f service.yaml -n preview',
+    'kubectl apply -f ingress.yaml -n preview',
+    'sleep 30',
+    `echo "Status of ${imageName}:${imageTag}:"`,
+    `kubectl get service/${appName} -n preview`
+  ]
 
   let result
 
