@@ -80,6 +80,7 @@ async function runCheckSuite (payload, secrets) {
 
   const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
   deploy.privileged = true
+  deploy.serviceAccount = 'default'
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
     `kubectl run ${appName} --image=${imageName} --port=80 -n preview`,
