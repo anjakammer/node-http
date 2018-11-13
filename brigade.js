@@ -92,7 +92,7 @@ async function runCheckSuite (payload, secrets) {
     `kubectl get service/${appName} -n preview`
   ]
 
-  const prCommenter = new Job('4-pr-commenter', 'anjakammer/brigade-pr-comment')
+  const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   const previewUrl = `${secrets.hostName}/preview/${imageTag}`
   prCommenter.env = {
     APP_NAME: 'Anya-test',
