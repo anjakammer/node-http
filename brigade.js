@@ -92,11 +92,11 @@ async function runCheckSuite (payload, secrets) {
     `kubectl get service/${appName} -n preview`
   ]
 
-  const prCommenter = new Job(buildStage.toLowerCase(), 'anjakammer/brigade-pr-comment')
+  const prCommenter = new Job('4-pr-commenter', 'anjakammer/brigade-pr-comment')
   const previewUrl = `${secrets.hostName}/preview/${imageTag}`
   prCommenter.env = {
     APP_NAME: 'Anya-test',
-    WAIT_MS: 0,
+    WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
     PAYLOAD: payload.body,
     TOKEN: payload.token
