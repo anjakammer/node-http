@@ -62,7 +62,6 @@ async function runCheckSuite (payload, secrets) {
   const repoName = secrets.buildRepoName
   const imageTag = payload.body.check_suite.head_sha
   const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
-  // const imageName = payload.body.repository.full_name
 
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
   build.args = [
@@ -92,13 +91,17 @@ async function runCheckSuite (payload, secrets) {
     `kubectl get service/${appName} -n preview`
   ]
 
-  const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   const previewUrl = `${secrets.hostName}/preview/${imageTag}`
+  const repo = payload.body.repository.full_name
+  const pr = payload.check_suite.pull_requests[0].number
+  const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
+
+  const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.env = {
     APP_NAME: 'Anya-test',
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
-    COMMENTS_URL: payload.body.check_suite.pull_requests[0].url,
+    COMMENTS_URL: commentsUrl,
     TOKEN: payload.token
   }
   prCommenter.run()
