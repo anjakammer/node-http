@@ -98,7 +98,7 @@ async function runCheckSuite (payload, secrets) {
     APP_NAME: 'Anya-test',
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
-    PAYLOAD: JSON.stringify(payload.body),
+    COMMENTS_URL: payload.body.check_suite.pull_requests[0].url,
     TOKEN: payload.token
   }
   prCommenter.run()
