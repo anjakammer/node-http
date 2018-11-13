@@ -104,6 +104,7 @@ async function runCheckSuite (payload, secrets) {
     COMMENTS_URL: commentsUrl,
     TOKEN: payload.token
   }
+
   prCommenter.run()
 
   // let result
