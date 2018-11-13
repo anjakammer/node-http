@@ -93,7 +93,7 @@ async function runCheckSuite (payload, secrets) {
 
   const previewUrl = `${secrets.hostName}/preview/${imageTag}`
   const repo = payload.body.repository.full_name
-  const pr = payload.check_suite.pull_requests[0].number
+  const pr = payload.body.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
 
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
