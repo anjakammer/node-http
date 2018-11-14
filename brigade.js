@@ -107,31 +107,31 @@ async function runCheckSuite (payload, secrets) {
 
   prCommenter.run()
 
-  // let result
+  let result
 
-  // try {
-  //   result = await build.run()
-  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
-  // } catch (err) {
-  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  // }
+  try {
+    result = await build.run()
+    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+  } catch (err) {
+    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
+    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  }
 
-  // try {
-  //   result = await test.run()
-  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
-  // } catch (err) {
-  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  // }
+  try {
+    result = await test.run()
+    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+  } catch (err) {
+    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  }
 
-  // try {
-  //   result = await deploy.run()
-  //   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-  // } catch (err) {
-  //   return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
-  // }
+  try {
+    result = await deploy.run()
+    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+  } catch (err) {
+    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
+  }
 }
 
 module.exports = { registerCheckSuite, runCheckSuite, sendSignal }
