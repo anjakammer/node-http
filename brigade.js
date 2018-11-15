@@ -90,8 +90,8 @@ async function runCheckSuite (payload, secrets) {
     `echo "Deploying ${appName}:${imageTag}"`,
     `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --labels="app=${appName}-${imageTag}-preview" --port=80 -n preview`,
     'cd /src/manifest',
-    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name/${appName}/g' -e 's/app-version/${imageTag}/g' ingress.yaml`,
-    `sed -i -e 's/name: app-name/name: ${appName}/g' -e 's/appName-imageTag-preview/${appName}-${imageTag}-preview/g' service.yaml`,
+    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name-app-version/${appName}-${imageTag}/g' ingress.yaml`,
+    `sed -i -e 's/app-name-app-version/${appName}-${imageTag}/g' service.yaml`,
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
     `echo "Status of ${appName}:${imageTag}:"`,
@@ -110,8 +110,6 @@ async function runCheckSuite (payload, secrets) {
     COMMENTS_URL: commentsUrl,
     TOKEN: JSON.parse(payload).token
   }
-
-  prCommenter.run()
 
   let result
 
@@ -135,6 +133,7 @@ async function runCheckSuite (payload, secrets) {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+    prCommenter.run()
   } catch (err) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
