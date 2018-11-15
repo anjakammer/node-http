@@ -16,5 +16,5 @@ spec:
       paths:
       - path: /preview/previewPath
         backend:
-          serviceName: app-name
+          serviceName: app-name-app-version
           servicePort: 80
