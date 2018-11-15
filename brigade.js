@@ -17,7 +17,7 @@ function checkRequested (e, p) {
   console.log('Check-Suite requested')
 
   registerCheckSuite(e.payload)
-  runCheckSuite(JSON.parse(e.payload), p.secrets)
+  runCheckSuite(e.payload, p.secrets)
     .then(() => { return console.log('Finished Check-Suite') })
     .catch((err) => { console.log(err) })
 }
@@ -58,9 +58,10 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 }
 
 async function runCheckSuite (payload, secrets) {
-  const appName = payload.body.repository.name
+  const webhook = JSON.parse(payload).body
+  const appName = webhook.repository.name
   const repoName = secrets.buildRepoName
-  const imageTag = payload.body.check_suite.head_sha
+  const imageTag = webhook.check_suite.head_sha
   const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
 
   const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
@@ -92,8 +93,8 @@ async function runCheckSuite (payload, secrets) {
   ]
 
   const previewUrl = `${secrets.hostName}/preview/${imageTag}`
-  const repo = payload.body.repository.full_name
-  const pr = payload.body.check_suite.pull_requests[0].number
+  const repo = webhook.repository.full_name
+  const pr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
 
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
@@ -102,7 +103,7 @@ async function runCheckSuite (payload, secrets) {
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
     COMMENTS_URL: commentsUrl,
-    TOKEN: payload.token
+    TOKEN: JSON.parse(payload).token
   }
 
   prCommenter.run()
