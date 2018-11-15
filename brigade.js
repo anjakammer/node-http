@@ -77,9 +77,10 @@ async function runCheckSuite (payload, secrets) {
     'npm test'
   ]
 
+  const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
+  const previewPath = appName + '\\/' + imageTag
   const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
   deploy.privileged = true
-  const previewPath = appName + '\\/' + imageTag
   deploy.serviceAccount = 'anya-deployer'
   deploy.tasks = [
     `echo "Deploying ${appName}:${imageTag}"`,
@@ -90,10 +91,9 @@ async function runCheckSuite (payload, secrets) {
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
     `echo "Status of ${appName}:${imageTag}:"`,
-    `kubectl get service/${appName} -n preview`
+    `echo "Preview URL: ${previewUrl}"`
   ]
 
-  const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
   const repo = webhook.repository.full_name
   const pr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
