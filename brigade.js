@@ -111,8 +111,6 @@ async function runCheckSuite (payload, secrets) {
     TOKEN: JSON.parse(payload).token
   }
 
-  prCommenter.run()
-
   let result
 
   try {
@@ -135,6 +133,7 @@ async function runCheckSuite (payload, secrets) {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+    prCommenter.run()
   } catch (err) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
