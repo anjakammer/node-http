@@ -1,0 +1,9 @@
+postDeployTests: false
+
+pullRequest:
+  
+  onSuccess:
+    previewUrlAsComment: true
+
+  onClose:
+    purgePreviewDeployments: true
