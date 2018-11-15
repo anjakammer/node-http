@@ -90,7 +90,7 @@ async function runCheckSuite (payload, secrets) {
     `echo "Deploying ${appName}:${imageTag}"`,
     `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --labels="app=${appName}-${imageTag}-preview" --port=80 -n preview`,
     'cd /src/manifest',
-    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name/${appName}/g' ingress.yaml`,
+    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name/${appName}/g' -e 's/app-version/${imageTag}/g' ingress.yaml`,
     `sed -i -e 's/name: app-name/name: ${appName}/g' -e 's/appName-imageTag-preview/${appName}-${imageTag}-preview/g' service.yaml`,
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
@@ -99,8 +99,8 @@ async function runCheckSuite (payload, secrets) {
   ]
 
   const repo = webhook.repository.full_name
-  const pr = webhook.check_suite.pull_requests[0].number
-  const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
+  const prNr = webhook.check_suite.pull_requests[0].number
+  const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
 
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.env = {
