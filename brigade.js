@@ -15,11 +15,15 @@ events.on('check_suite:rerequested', checkRequested)
 
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
-
-  registerCheckSuite(e.payload)
-  runCheckSuite(e.payload, p.secrets)
-    .then(() => { return console.log('Finished Check-Suite') })
-    .catch((err) => { console.log(err) })
+  const pr = JSON.parse(e.payload).body.check_suite.pull_requests
+  if (pr.length === 0) {
+    console.log('Nothing to check')
+  } else {
+    registerCheckSuite(e.payload)
+    runCheckSuite(e.payload, p.secrets)
+      .then(() => { return console.log('Finished Check-Suite') })
+      .catch((err) => { console.log(err) })
+  }
 }
 
 function registerCheckSuite (payload) {
