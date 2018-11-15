@@ -84,7 +84,7 @@ async function runCheckSuite (payload, secrets) {
     `echo "Deploying ${appName}:${imageTag}"`,
     `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --labels="app=${appName}-${imageTag}-preview" --port=80 -n preview`,
     'cd /src/manifest',
-    `sed -i -e 's/previewPath/${imageTag}/g' -e 's/app-name/${appName}/g' ingress.yaml`,
+    `sed -i -e 's/previewPath/${appName}\/${imageTag}/g' -e 's/app-name/${appName}/g' ingress.yaml`,
     `sed -i -e 's/name: app-name/name: ${appName}/g' -e 's/appName-imageTag-preview/${appName}-${imageTag}-preview/g' service.yaml`,
     'kubectl apply -f service.yaml -n preview',
     'kubectl apply -f ingress.yaml -n preview',
@@ -92,7 +92,7 @@ async function runCheckSuite (payload, secrets) {
     `kubectl get service/${appName} -n preview`
   ]
 
-  const previewUrl = `${secrets.hostName}/preview/${imageTag}`
+  const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
   const repo = webhook.repository.full_name
   const pr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${pr}/comments`
@@ -101,7 +101,7 @@ async function runCheckSuite (payload, secrets) {
   prCommenter.env = {
     APP_NAME: 'Anya-test',
     WAIT_MS: '0',
-    COMMENT: `Preview Environment is set up: [https://${previewUrl}](${previewUrl})`,
+    COMMENT: `Preview Environment is set up: [${previewUrl}](https://${previewUrl})`,
     COMMENTS_URL: commentsUrl,
     TOKEN: JSON.parse(payload).token
   }
