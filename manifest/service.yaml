@@ -1,10 +1,10 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: app-name
+  name: app-name-app-version
 spec:
   selector:
-    app: appName-imageTag-preview
+    app: app-name-app-version-preview
   ports:
   - protocol: TCP
     port: 80
