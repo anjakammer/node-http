@@ -10,8 +10,13 @@ const cancelled = 'cancelled'
 const success = 'success'
 const stages = [buildStage, testStage, deployStage]
 
+events.on('check_suite:created', checkCreated)
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
+
+function checkCreated (e, p) {
+  console.log('tell me what you see: ' + JSON.parse(e.payload))
+}
 
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
