@@ -21,7 +21,15 @@ function checkRequested (e, p) {
     // re-request the check, to get the pr-id
     console.log('No PR-id found. Will re-request the check_suite')
     const https = require('https')
-    https.get(`${webhook.check_suite.pull_requests.url}/rerequest`, (res) => {
+    const options = {
+      method: 'POST',
+      headers: {
+        'Authorization': 'token ' + JSON.parse(e.payload).token,
+        'User-Agent': 'Anya-test',
+        'Accept': 'application/vnd.github.machine-man-preview+json'
+      }
+    }
+    https.request(`${webhook.check_suite.pull_requests.url}/rerequest`, options, (res) => {
       if (res.statusCode !== 200) {
         return console.log('Failed to re-request check_suite.')
       }
