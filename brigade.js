@@ -30,9 +30,16 @@ function checkRequested (e, p) {
         'Accept': 'application/vnd.github.machine-man-preview+json'
       },
       method: 'POST'
-    }).on('error', function (err) {
-      console.log(err)
+    }).on('response', function (response) {
+    // unmodified http.IncomingMessage object
+      response.on('data', function (data) {
+      // compressed data as it is received
+        console.log('received ' + data.length + ' bytes of compressed data')
+      })
     })
+      .on('error', function (err) {
+        console.log(err)
+      })
   } else {
     registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
