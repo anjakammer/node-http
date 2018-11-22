@@ -21,6 +21,7 @@ function checkRequested (e, p) {
   if (pr.length === 0) {
     // re-request the check, to get the pr-id
     console.log('No PR-id found. Will re-request the check_suite')
+    console.log(webhook.check_suite.pull_requests.url)
     request({
       uri: webhook.check_suite.pull_requests.url,
       json: true,
