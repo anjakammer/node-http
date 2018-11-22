@@ -27,14 +27,14 @@ function checkRequested (e, p) {
       headers: {
         'Authorization': 'token ' + JSON.parse(e.payload).token,
         'User-Agent': 'Anya-test',
-        'Accept': 'application/vnd.github.machine-man-preview+json'
+        'Accept': 'application/vnd.github.antiope-preview+json'
       },
       method: 'POST'
     }).on('response', function (response) {
     // unmodified http.IncomingMessage object
       response.on('data', function (data) {
       // compressed data as it is received
-        console.log('received ' + data.length + ' bytes of compressed data')
+        console.log('received ' + data)
       })
     })
       .on('error', function (err) {
