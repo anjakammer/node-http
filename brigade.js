@@ -35,6 +35,8 @@ function checkRequested (e, p) {
       if (res.statusCode !== 200) {
         return console.log('Failed to re-request check_suite.')
       }
+    }).on('error', (e) => {
+      console.error(e)
     })
   } else {
     registerCheckSuite(e.payload)
