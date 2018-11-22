@@ -16,30 +16,11 @@ events.on('check_suite:rerequested', checkRequested)
 
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
-  const webhook = JSON.parse(e.payload).body
-  const pr = webhook.check_suite.pull_requests
-  if ((pr.length === 0) && (webhook.action !== 'rerequested')) {
+  const payload = JSON.parse(e.payload)
+  const pr = payload.body.check_suite.pull_requests
+  if ((pr.length === 0) && (payload.body.action !== 'rerequested')) {
     // re-request the check, to get the pr-id
-    console.log('No PR-id found. Will re-request the check_suite')
-    request({
-      uri: webhook.check_suite.url + '/rerequest',
-      json: true,
-      headers: {
-        'Authorization': 'token ' + JSON.parse(e.payload).token,
-        'User-Agent': 'Anya-test',
-        'Accept': 'application/vnd.github.antiope-preview+json'
-      },
-      method: 'POST'
-    }).on('response', function (response) {
-    // unmodified http.IncomingMessage object
-      response.on('data', function (data) {
-      // compressed data as it is received
-        console.log('received ' + data)
-      })
-    })
-      .on('error', function (err) {
-        console.log(err)
-      })
+    rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   } else {
     registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
@@ -126,7 +107,7 @@ async function runCheckSuite (payload, secrets) {
 
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.env = {
-    APP_NAME: 'Anya-test',
+    APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [${previewUrl}](https://${previewUrl})`,
     COMMENTS_URL: commentsUrl,
@@ -161,4 +142,20 @@ async function runCheckSuite (payload, secrets) {
   }
 }
 
-module.exports = { registerCheckSuite, runCheckSuite, sendSignal }
+function rerequestCheckSuite (url, token) {
+  console.log('No PR-id found. Will re-request the check_suite.')
+  request({
+    uri: `${url}/rerequest`,
+    json: true,
+    headers: {
+      'Authorization': `token ${token}`,
+      'User-Agent': 'Anya-test',
+      'Accept': 'application/vnd.github.antiope-preview+json'
+    },
+    method: 'POST'
+  }).on('error', function (err) {
+    console.log(err)
+  })
+}
+
+module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
