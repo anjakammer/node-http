@@ -18,7 +18,7 @@ function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
-  if ((pr.length === 0)) {
+  if (pr.length === 0) {
     // re-request the check, to get the pr-id
     if (payload.body.action !== 'rerequested') {
       rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
@@ -144,14 +144,14 @@ async function runCheckSuite (payload, secrets) {
   }
 }
 
-function rerequestCheckSuite (url, token) {
+function rerequestCheckSuite (url, token, ghAppName) {
   console.log('No PR-id found. Will re-request the check_suite.')
   request({
     uri: `${url}/rerequest`,
     json: true,
     headers: {
       'Authorization': `token ${token}`,
-      'User-Agent': 'Anya-test',
+      'User-Agent': ghAppName,
       'Accept': 'application/vnd.github.antiope-preview+json'
     },
     method: 'POST'
