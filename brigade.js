@@ -36,12 +36,12 @@ function checkRequested (e, p) {
         return console.log('Failed to re-request check_suite.')
       }
     })
+  } else {
+    registerCheckSuite(e.payload)
+    runCheckSuite(e.payload, p.secrets)
+      .then(() => { return console.log('Finished Check-Suite') })
+      .catch((err) => { console.log(err) })
   }
-
-  registerCheckSuite(e.payload)
-  runCheckSuite(e.payload, p.secrets)
-    .then(() => { return console.log('Finished Check-Suite') })
-    .catch((err) => { console.log(err) })
 }
 
 function registerCheckSuite (payload) {
