@@ -18,9 +18,11 @@ function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
-  if ((pr.length === 0) && (payload.body.action !== 'rerequested')) {
+  if ((pr.length === 0)) {
     // re-request the check, to get the pr-id
-    rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
+    if (payload.body.action !== 'rerequested') {
+      rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
+    } // ignore all else
   } else {
     registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
