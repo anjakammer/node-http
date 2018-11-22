@@ -31,13 +31,15 @@ function checkRequested (e, p) {
         'Accept': 'application/vnd.github.machine-man-preview+json'
       }
     }
-    https.request(options, (res) => {
+    const req = https.request(options, (res) => {
       if (res.statusCode !== 200) {
-        return console.log('Failed to re-request check_suite.')
+        console.log('Failed to re-request check_suite.')
       }
-    }).on('error', (e) => {
+    })
+    req.on('error', (e) => {
       console.error(e)
     })
+    req.end()
   } else {
     registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
