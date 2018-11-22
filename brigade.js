@@ -10,25 +10,28 @@ const cancelled = 'cancelled'
 const success = 'success'
 const stages = [buildStage, testStage, deployStage]
 
-events.on('check_suite:created', checkCreated)
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 
-function checkCreated (e, p) {
-  console.log('tell me what you see: ' + JSON.parse(e.payload))
-}
-
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
-  const pr = JSON.parse(e.payload).body.check_suite.pull_requests
+  const webhook = JSON.parse(e.payload).body
+  const pr = webhook.check_suite.pull_requests
   if (pr.length === 0) {
-    console.log('Nothing to check')
-  } else {
-    registerCheckSuite(e.payload)
-    runCheckSuite(e.payload, p.secrets)
-      .then(() => { return console.log('Finished Check-Suite') })
-      .catch((err) => { console.log(err) })
+    // re-request the check, to get the pr-id
+    console.log('No PR-id found. Will re-request the check_suite')
+    const https = require('https')
+    https.get(`${webhook.check_suite.pull_requests.url}/rerequest`, (res) => {
+      if (res.statusCode !== 200) {
+        return console.log('Failed to re-request check_suite.')
+      }
+    })
   }
+
+  registerCheckSuite(e.payload)
+  runCheckSuite(e.payload, p.secrets)
+    .then(() => { return console.log('Finished Check-Suite') })
+    .catch((err) => { console.log(err) })
 }
 
 function registerCheckSuite (payload) {
