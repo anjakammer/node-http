@@ -1,5 +1,6 @@
 const { events, Job } = require('brigadier')
 const eachSeries = require('async/eachSeries')
+const requestp = require('request-promise')
 
 const checkRunImage = 'technosophos/brigade-github-check-run:latest'
 const buildStage = '1-Build'
@@ -20,7 +21,6 @@ function checkRequested (e, p) {
   if (pr.length === 0) {
     // re-request the check, to get the pr-id
     console.log('No PR-id found. Will re-request the check_suite')
-    const requestp = require('request-promise')
     const req = requestp({
       url: webhook.check_suite.pull_requests.url,
       json: true,
