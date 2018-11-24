@@ -25,9 +25,9 @@ async function checkRequested (e, p) {
     } // ignore all else
   } else {
     await registerCheckSuite(e.payload)
-    // runCheckSuite(e.payload, p.secrets)
-    //   .then(() => { return console.log('Finished Check-Suite') })
-    //   .catch((err) => { console.log(err) })
+    runCheckSuite(e.payload, p.secrets)
+      .then(() => { return console.log('Finished Check-Suite') })
+      .catch((err) => { console.log(err) })
   }
 }
 
