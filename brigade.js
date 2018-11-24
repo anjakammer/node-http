@@ -31,8 +31,8 @@ async function checkRequested (e, p) {
   }
 }
 
-function registerCheckSuite (payload) {
-  eachSeries(stages, (check, next) => {
+async function registerCheckSuite (payload) {
+  await eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
     const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
