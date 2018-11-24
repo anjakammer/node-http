@@ -157,7 +157,7 @@ function rerequestCheckSuite (url, token, ghAppName) {
     method: 'POST'
   }).on('response', function (response) {
     console.log(response.statusCode)
-    console.log(response.body)
+    console.log(response)
   }).on('error', function (err) {
     console.log(err)
   })
