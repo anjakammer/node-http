@@ -1,5 +1,6 @@
 const { events, Job } = require('brigadier')
 const eachSeries = require('async/eachSeries')
+const request = require('request')
 
 const checkRunImage = 'technosophos/brigade-github-check-run:latest'
 const buildStage = '1-Build'
@@ -15,35 +16,23 @@ events.on('check_suite:rerequested', checkRequested)
 
 function checkRequested (e, p) {
   console.log('Check-Suite requested')
-  const webhook = JSON.parse(e.payload).body
-  const pr = webhook.check_suite.pull_requests
+  const payload = JSON.parse(e.payload)
+  const pr = payload.body.check_suite.pull_requests
   if (pr.length === 0) {
     // re-request the check, to get the pr-id
-    console.log('No PR-id found. Will re-request the check_suite')
-    const https = require('https')
-    const options = {
-      method: 'POST',
-      headers: {
-        'Authorization': 'token ' + JSON.parse(e.payload).token,
-        'User-Agent': 'Anya-test',
-        'Accept': 'application/vnd.github.machine-man-preview+json'
-      }
-    }
-    https.request(`${webhook.check_suite.pull_requests.url}/rerequest`, options, (res) => {
-      if (res.statusCode !== 200) {
-        return console.log('Failed to re-request check_suite.')
-      }
-    })
+    if (payload.body.action !== 'rerequested') {
+      rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
+    } // ignore all else
+  } else {
+    registerCheckSuite(e.payload)
+    runCheckSuite(e.payload, p.secrets)
+      .then(() => { return console.log('Finished Check-Suite') })
+      .catch((err) => { console.log(err) })
   }
-
-  registerCheckSuite(e.payload)
-  runCheckSuite(e.payload, p.secrets)
-    .then(() => { return console.log('Finished Check-Suite') })
-    .catch((err) => { console.log(err) })
 }
 
-function registerCheckSuite (payload) {
-  eachSeries(stages, (check, next) => {
+async function registerCheckSuite (payload) {
+  await eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
     const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
@@ -55,10 +44,11 @@ function registerCheckSuite (payload) {
       CHECK_SUMMARY: `${check} scheduled`
     }
 
-    return registerCheck.run()
-      .then(() => { return next() })
+    registerCheck.run()
+      .then(() => { next() })
       .catch(err => { console.log(err) })
   })
+
   return Promise.resolve('Finished Check-Suite registration')
 }
 
@@ -120,7 +110,7 @@ async function runCheckSuite (payload, secrets) {
 
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.env = {
-    APP_NAME: 'Anya-test',
+    APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: [${previewUrl}](https://${previewUrl})`,
     COMMENTS_URL: commentsUrl,
@@ -155,4 +145,23 @@ async function runCheckSuite (payload, secrets) {
   }
 }
 
-module.exports = { registerCheckSuite, runCheckSuite, sendSignal }
+function rerequestCheckSuite (url, token, ghAppName) {
+  console.log('No PR-id found. Will re-request the check_suite.')
+  request({
+    uri: `${url}/rerequest`,
+    json: true,
+    headers: {
+      'Authorization': `token ${token}`,
+      'User-Agent': ghAppName,
+      'Accept': 'application/vnd.github.antiope-preview+json'
+    },
+    method: 'POST'
+  }).on('response', function (response) {
+    console.log(response.statusCode)
+    console.log(response.statusMessage)
+  }).on('error', function (err) {
+    console.log(err)
+  })
+}
+
+module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
