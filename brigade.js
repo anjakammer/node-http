@@ -155,6 +155,9 @@ function rerequestCheckSuite (url, token, ghAppName) {
       'Accept': 'application/vnd.github.antiope-preview+json'
     },
     method: 'POST'
+  }).on('response', function (response) {
+    console.log(response.statusCode)
+    console.log(response.body)
   }).on('error', function (err) {
     console.log(err)
   })
