@@ -14,7 +14,7 @@ const stages = [buildStage, testStage, deployStage]
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 
-function checkRequested (e, p) {
+async function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
@@ -24,7 +24,7 @@ function checkRequested (e, p) {
       rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
     } // ignore all else
   } else {
-    registerCheckSuite(e.payload)
+    await registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
