@@ -31,8 +31,8 @@ function checkRequested (e, p) {
   }
 }
 
-function registerCheckSuite (payload) {
-  eachSeries(stages, (check, next) => {
+async function registerCheckSuite (payload) {
+  await eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
     const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
@@ -44,10 +44,11 @@ function registerCheckSuite (payload) {
       CHECK_SUMMARY: `${check} scheduled`
     }
 
-    return registerCheck.run()
-      .then(() => { return next() })
+    registerCheck.run()
+      .then(() => { next() })
       .catch(err => { console.log(err) })
   })
+
   return Promise.resolve('Finished Check-Suite registration')
 }
 
@@ -157,7 +158,7 @@ function rerequestCheckSuite (url, token, ghAppName) {
     method: 'POST'
   }).on('response', function (response) {
     console.log(response.statusCode)
-    console.log(response)
+    console.log(response.statusMessage)
   }).on('error', function (err) {
     console.log(err)
   })
