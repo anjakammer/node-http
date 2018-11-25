@@ -4,5 +4,5 @@ EXPOSE 8080
 WORKDIR /usr/src/app
 COPY . .
 USER node
-RUN npm install
+RUN npm --unsafe-perm install
 CMD ["npm", "start"]
