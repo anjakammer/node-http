@@ -14,7 +14,7 @@ const stages = [buildStage, testStage, deployStage]
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 
-function checkRequested (e, p) {
+async function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
@@ -24,15 +24,15 @@ function checkRequested (e, p) {
       rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
     } // ignore all else
   } else {
-    registerCheckSuite(e.payload)
+    await registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   }
 }
 
-function registerCheckSuite (payload) {
-  eachSeries(stages, (check, next) => {
+async function registerCheckSuite (payload) {
+  await eachSeries(stages, (check, next) => {
     console.log(`register-${check}`)
 
     const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
@@ -44,11 +44,10 @@ function registerCheckSuite (payload) {
       CHECK_SUMMARY: `${check} scheduled`
     }
 
-    return registerCheck.run()
-      .then(() => { return next() })
+    registerCheck.run()
+      .then(() => { next() })
       .catch(err => { console.log(err) })
   })
-  return Promise.resolve('Finished Check-Suite registration')
 }
 
 function sendSignal ({ stage, logs, conclusion, payload }) {
@@ -157,7 +156,7 @@ function rerequestCheckSuite (url, token, ghAppName) {
     method: 'POST'
   }).on('response', function (response) {
     console.log(response.statusCode)
-    console.log(response)
+    console.log(response.statusMessage)
   }).on('error', function (err) {
     console.log(err)
   })
