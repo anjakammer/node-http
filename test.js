@@ -23,10 +23,10 @@ describe('Root path', function () {
   it('should deliver logo', function () {
     expect(true).to.be.equal(true)
   })
-  it('should have 1 <h1>', function () {
+  it('should have 1 h1-headline', function () {
     expect(true).to.be.equal(true)
   })
-  it('should have min 1 <p>', function () {
+  it('should have >= 1 p-paragraph', function () {
     expect(true).to.be.equal(true)
   })
 })
