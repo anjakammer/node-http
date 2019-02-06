@@ -2,7 +2,7 @@ const { events, Job } = require('brigadier')
 const eachSeries = require('async/eachSeries')
 const request = require('request')
 
-const checkRunImage = 'technosophos/brigade-github-check-run:latest'
+const checkRunImage = 'anjakammer/brigade-github-check-run:99fb1ae'
 const buildStage = '1-Build'
 const testStage = '2-Test'
 const deployStage = '3-Deploy'
