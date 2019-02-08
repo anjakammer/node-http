@@ -70,12 +70,31 @@ async function runCheckSuite (payload, secrets) {
   const appName = webhook.repository.name
   const repoName = secrets.buildRepoName
   const imageTag = webhook.check_suite.head_sha
+//  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
   const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
 
-  const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
-  build.args = [
-    `-d=${imageName}`,
-    '-c=/src'
+//  const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
+//  build.args = [
+//    `-d=${imageName}`,
+//    '-c=/src'
+//  ]
+
+  var driver = 'overlay'
+  const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
+  build.privileged = true
+  build.env.DOCKER_USER = secrets.DOCKER_USER
+  build.env.DOCKER_PASS = secrets.DOCKER_PASS
+  build.env.DOCKER_REGISTRY = secrets.DOCKER_REGISTRY // docker.io
+  build.env = {
+    DOCKER_DRIVER: driver
+  }
+  build.tasks = [
+    'dockerd-entrypoint.sh &',
+    'sleep 20',
+    'cd /src',
+    `docker build -t ${imageName} .`,
+    'docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY',
+    `docker push ${imageName}`
   ]
 
   const test = new Job(testStage.toLowerCase(), imageName)
