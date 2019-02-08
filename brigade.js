@@ -100,7 +100,7 @@ async function runCheckSuite (payload, secrets) {
   deployHelm.privileged = true
   deployHelm.serviceAccount = 'anya-deployer'
   deployHelm.tasks = [
-    'helm version'
+    'helm install --repo https://storage.googleapis.com/anya-deployment/charts deployment-template --namespace preview'
   ]
 
   const repo = webhook.repository.full_name
