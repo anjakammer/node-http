@@ -100,7 +100,7 @@ async function runCheckSuite (payload, secrets) {
   deployHelm.privileged = true
   deployHelm.serviceAccount = 'anya-deployer'
   deployHelm.tasks = [
-    'helm upgrade --install --name depl-temp --repo https://storage.googleapis.com/anya-deployment/charts deployment-template --namespace preview'
+    `helm upgrade --install ${appName}-${imageTag}-preview --repo https://storage.googleapis.com/anya-deployment/charts deployment-template --namespace preview`
   ]
 
   const repo = webhook.repository.full_name
@@ -127,13 +127,13 @@ async function runCheckSuite (payload, secrets) {
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
   }
 
-  try {
-    result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  }
+  // try {
+  //   result = await test.run()
+  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+  // } catch (err) {
+  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  // }
 
   try {
     result = await deployHelm.run()
