@@ -55,7 +55,7 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 async function runCheckSuite (payload, secrets) {
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
-  const imageTag = webhook.check_suite.head_sha
+  const imageTag = (webhook.check_suite.head_sha).slice(0, 5)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
