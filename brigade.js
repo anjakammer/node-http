@@ -104,14 +104,7 @@ async function runCheckSuite (payload, secrets) {
   deployHelm.tasks = [
     'helm init --client-only > /dev/null 2>&1',
     'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
-    `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview
-    --set-string
-    image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},
-    image.tag=${imageTag},
-    ingress.path=${previewPath},
-    ingress.host=${secrets.hostName},
-    ingress.tlsSecretName=${secrets.tlsName},
-    service.targetPort=${targetPort}`,
+    `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${previewPath},ingress.host=${secrets.hostName},ingress.tlsSecretName=${secrets.tlsName},service.targetPort=${targetPort}`,
     `echo "Preview URL: ${previewUrl}"`
   ]
 
