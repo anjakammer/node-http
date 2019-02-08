@@ -100,6 +100,7 @@ async function runCheckSuite (payload, secrets) {
   deployHelm.privileged = true
   deployHelm.serviceAccount = 'anya-deployer'
   deployHelm.tasks = [
+    'helm init --client-only',
     'helm repo add anya https://storage.googleapis.com/anya-deployment/charts',
     `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview`
   ]
