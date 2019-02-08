@@ -1,6 +1,5 @@
 {
     "dependencies": {
-      "async": "2.6.1",
       "request": "2.88.0"
     }
 }

@@ -1,15 +1,13 @@
-const { events, Job } = require('brigadier')
-const eachSeries = require('async/eachSeries')
+const { events, Job, Group } = require('brigadier')
 const request = require('request')
 
-const checkRunImage = 'anjakammer/brigade-github-check-run:99fb1ae'
+const checkRunImage = 'deis/brigade-github-check-run:latest'
 const buildStage = '1-Build'
 const testStage = '2-Test'
 const deployStage = '3-Deploy'
 const failure = 'failure'
 const cancelled = 'cancelled'
 const success = 'success'
-const stages = [buildStage, testStage, deployStage]
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -24,30 +22,19 @@ async function checkRequested (e, p) {
       rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
     } // ignore all else
   } else {
-    await registerCheckSuite(e.payload)
+    registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   }
 }
 
-async function registerCheckSuite (payload) {
-  await eachSeries(stages, (check, next) => {
-    console.log(`register-${check}`)
-
-    const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
-    registerCheck.imageForcePull = true
-    registerCheck.env = {
-      CHECK_PAYLOAD: payload,
-      CHECK_NAME: check,
-      CHECK_TITLE: 'Description',
-      CHECK_SUMMARY: `${check} scheduled`
-    }
-
-    registerCheck.run()
-      .then(() => { next() })
-      .catch(err => { console.log(err) })
-  })
+function registerCheckSuite (payload) {
+  return Group.runEach([
+    new RegisterCheck(buildStage, payload),
+    new RegisterCheck(testStage, payload),
+    new RegisterCheck(deployStage, payload)
+  ]).catch(err => { console.log(err) })
 }
 
 function sendSignal ({ stage, logs, conclusion, payload }) {
@@ -68,32 +55,20 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 async function runCheckSuite (payload, secrets) {
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
-  const repoName = secrets.buildRepoName
   const imageTag = webhook.check_suite.head_sha
-//  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
-  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
+  const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
-//  const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
-//  build.args = [
-//    `-d=${imageName}`,
-//    '-c=/src'
-//  ]
-
-  var driver = 'overlay'
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
-  build.env.DOCKER_USER = secrets.DOCKER_USER
-  build.env.DOCKER_PASS = secrets.DOCKER_PASS
-  build.env.DOCKER_REGISTRY = secrets.DOCKER_REGISTRY // docker.io
   build.env = {
-    DOCKER_DRIVER: driver
+    DOCKER_DRIVER: 'overlay'
   }
   build.tasks = [
-    'dockerd-entrypoint.sh &',
+    'dockerd-entrypoint.sh > /dev/null 2>&1 &',
     'sleep 20',
     'cd /src',
+    `echo ${secrets.DOCKER_PASS} | docker login -u ${secrets.DOCKER_USER} --password-stdin ${secrets.DOCKER_REGISTRY} > /dev/null 2>&1`,
     `docker build -t ${imageName} .`,
-    'docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY',
     `docker push ${imageName}`
   ]
 
@@ -179,6 +154,19 @@ function rerequestCheckSuite (url, token, ghAppName) {
   }).on('error', function (err) {
     console.log(err)
   })
+}
+
+class RegisterCheck extends Job {
+  constructor (check, payload) {
+    super(`register-${check}`.toLowerCase(), checkRunImage)
+    this.imageForcePull = true
+    this.env = {
+      CHECK_PAYLOAD: payload,
+      CHECK_NAME: check,
+      CHECK_TITLE: 'Description',
+      CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
 }
 
 module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
