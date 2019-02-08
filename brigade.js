@@ -55,8 +55,9 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 async function runCheckSuite (payload, secrets) {
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
-  const imageTag = (webhook.check_suite.head_sha).slice(0, 5)
+  const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
+  const targetPort = 8080 // TODO fetch this from dockerfile
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
@@ -97,12 +98,21 @@ async function runCheckSuite (payload, secrets) {
   ]
 
   const deployHelm = new Job('deploy-with-helm', 'lachlanevenson/k8s-helm')
+  deployHelm.useSource = false
   deployHelm.privileged = true
   deployHelm.serviceAccount = 'anya-deployer'
   deployHelm.tasks = [
-    'helm init --client-only',
-    'helm repo add anya https://storage.googleapis.com/anya-deployment/charts',
-    `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview`
+    'helm init --client-only > /dev/null 2>&1',
+    'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
+    `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview
+    --set-string
+    image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},
+    image.tag=${imageTag},
+    ingress.path=${previewPath},
+    ingress.host=${secrets.hostName},
+    ingress.tlsSecretName=${secrets.tlsName},
+    service.targetPort=${targetPort}`,
+    `echo "Preview URL: ${previewUrl}"`
   ]
 
   const repo = webhook.repository.full_name
@@ -120,22 +130,22 @@ async function runCheckSuite (payload, secrets) {
 
   let result
 
-  // try {
-  //   result = await build.run()
-  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
-  // } catch (err) {
-  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  // }
+  try {
+    result = await build.run()
+    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+  } catch (err) {
+    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
+    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  }
 
-  // try {
-  //   result = await test.run()
-  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
-  // } catch (err) {
-  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  // }
+  try {
+    result = await test.run()
+    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+  } catch (err) {
+    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+  }
 
   try {
     result = await deployHelm.run()
