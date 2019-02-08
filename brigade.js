@@ -96,6 +96,13 @@ async function runCheckSuite (payload, secrets) {
     `echo "Preview URL: ${previewUrl}"`
   ]
 
+  const deployHelm = new Job('deploy-with-helm', 'lachlanevenson/k8s-helm')
+  deployHelm.privileged = true
+  deployHelm.serviceAccount = 'anya-deployer'
+  deployHelm.tasks = [
+    'helm version'
+  ]
+
   const repo = webhook.repository.full_name
   const prNr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
@@ -129,7 +136,7 @@ async function runCheckSuite (payload, secrets) {
   }
 
   try {
-    result = await deploy.run()
+    result = await deployHelm.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
     prCommenter.run()
   } catch (err) {
