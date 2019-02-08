@@ -75,6 +75,7 @@ async function runCheckSuite (payload, secrets) {
 
   const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
+  test.useSource = false
   test.tasks = [
     `echo "Running Tests"`,
     'npm test'
@@ -82,26 +83,11 @@ async function runCheckSuite (payload, secrets) {
 
   const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
   const previewPath = appName + '\\/' + imageTag
-  const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
+  const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
+  deploy.useSource = false
   deploy.privileged = true
   deploy.serviceAccount = 'anya-deployer'
   deploy.tasks = [
-    `echo "Deploying ${appName}:${imageTag}"`,
-    `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --labels="app=${appName}-${imageTag}-preview" --port=80 -n preview`,
-    'cd /src/manifest',
-    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name-app-version/${appName}-${imageTag}/g' ingress.yaml`,
-    `sed -i -e 's/app-name-app-version/${appName}-${imageTag}/g' service.yaml`,
-    'kubectl apply -f service.yaml -n preview',
-    'kubectl apply -f ingress.yaml -n preview',
-    `echo "Status of ${appName}:${imageTag}:"`,
-    `echo "Preview URL: ${previewUrl}"`
-  ]
-
-  const deployHelm = new Job('deploy-with-helm', 'lachlanevenson/k8s-helm')
-  deployHelm.useSource = false
-  deployHelm.privileged = true
-  deployHelm.serviceAccount = 'anya-deployer'
-  deployHelm.tasks = [
     'helm init --client-only > /dev/null 2>&1',
     'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
     `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${previewPath},ingress.host=${secrets.hostName},ingress.tlsSecretName=${secrets.tlsName},service.targetPort=${targetPort}`,
@@ -111,8 +97,8 @@ async function runCheckSuite (payload, secrets) {
   const repo = webhook.repository.full_name
   const prNr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
-
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
+  prCommenter.useSource = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
@@ -141,7 +127,7 @@ async function runCheckSuite (payload, secrets) {
   }
 
   try {
-    result = await deployHelm.run()
+    result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
     prCommenter.run()
   } catch (err) {
@@ -171,7 +157,7 @@ function rerequestCheckSuite (url, token, ghAppName) {
 class RegisterCheck extends Job {
   constructor (check, payload) {
     super(`register-${check}`.toLowerCase(), checkRunImage)
-    this.imageForcePull = true
+    this.useSource = false
     this.env = {
       CHECK_PAYLOAD: payload,
       CHECK_NAME: check,
