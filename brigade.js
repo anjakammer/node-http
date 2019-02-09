@@ -96,7 +96,7 @@ async function runCheckSuite (payload, secrets) {
   let result
 
   // try {
-    result = await parse.run()
+    result = await parse.run().toString()
     let config = result.substring(result.indexOf('{') - 1, result.lastIndexOf('}'))
     console.log(config)
     // config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
