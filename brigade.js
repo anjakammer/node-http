@@ -129,7 +129,7 @@ async function runCheckSuite (payload, secrets) {
 //   } catch (err) {
 //     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
 //   }
-// }
+}
 
 function registerCheckSuite (payload) {
   return Group.runEach([
