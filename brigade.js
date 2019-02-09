@@ -30,13 +30,25 @@ async function checkRequested (e, p) {
 }
 
 async function runCheckSuite (payload, secrets) {
+  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.env.DIR = '/src/.anya'
+  parse.imageForcePull = true
+  let config = ''
+
+  try {
+    let result = await parse.run()
+    config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
+    sendSignal({ stage: 'parsing', logs: config, conclusion: success, payload })
+  } catch (err) {
+    await sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
+    return
+  }
+
   registerCheckSuite(payload)
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
-
-  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
@@ -90,33 +102,33 @@ async function runCheckSuite (payload, secrets) {
     TOKEN: JSON.parse(payload).token
   }
 
-  let result
-
-  try {
-    result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  }
-
-  try {
-    result = await parse.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
-  } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
-  }
-
-  try {
-    result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-    if (!prodDeploy) { prCommenter.run() }
-  } catch (err) {
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
-  }
-}
+//   let result
+//
+//   try {
+//     result = await build.run()
+//     sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+//   } catch (err) {
+//     await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
+//     await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
+//     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+//   }
+//
+//   try {
+//     result = await test.run()
+//     sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+//   } catch (err) {
+//     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+//     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+//   }
+//
+//   try {
+//     result = await deploy.run()
+//     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+//     if (!prodDeploy) { prCommenter.run() }
+//   } catch (err) {
+//     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
+//   }
+// }
 
 function registerCheckSuite (payload) {
   return Group.runEach([
