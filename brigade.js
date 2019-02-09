@@ -8,6 +8,8 @@ const deployStage = '3-Deploy'
 const failure = 'failure'
 const cancelled = 'cancelled'
 const success = 'success'
+let prodDeploy = false
+let prNr = 0
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -16,12 +18,12 @@ async function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
-  if (pr.length === 0) {
+  prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
+  if (pr.length === 0 && !prodDeploy && payload.body.action !== 'rerequested') {
     // re-request the check, to get the pr-id
-    if (payload.body.action !== 'rerequested') {
-      rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
-    } // ignore all else
+    return rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   } else {
+    prNr = payload.body.check_suite.pull_requests[0].number
     registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
@@ -57,7 +59,6 @@ async function runCheckSuite (payload, secrets) {
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
-  const targetPort = 8080 // TODO fetch this from dockerfile
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
@@ -81,8 +82,13 @@ async function runCheckSuite (payload, secrets) {
     'npm test'
   ]
 
-  const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
-  const previewPath = appName + '\\/' + imageTag
+  const targetPort = 8080 // TODO fetch this from dockerfile
+  const host = prodDeploy ? secrets.prodHost : secrets.prevHost
+  const path = prodDeploy ? secrets.prodPath : `preview/${appName}/${imageTag}`
+  const url = `${host}/${path}`
+  const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
+  const deploymentName = prodDeploy ? `${appName}-${imageTag}` : `${appName}-${imageTag}-preview`
+  const namespace = prodDeploy ? 'production' : 'preview'
   const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
   deploy.useSource = false
   deploy.privileged = true
@@ -90,19 +96,18 @@ async function runCheckSuite (payload, secrets) {
   deploy.tasks = [
     'helm init --client-only > /dev/null 2>&1',
     'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
-    `helm upgrade --install ${appName}-${imageTag}-preview anya/deployment-template --namespace preview --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${previewPath},ingress.host=${secrets.hostName},ingress.tlsSecretName=${secrets.tlsName},service.targetPort=${targetPort},nameOverride=${appName},fullnameOverride=${appName}-${imageTag}`,
-    `echo "Preview URL: <a href="https://${previewUrl}" target="_blank">${previewUrl}</a>"`
+    `helm upgrade --install ${deploymentName} anya/deployment-template --namespace ${namespace} --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${path},ingress.host=${host},ingress.tlsSecretName=${tlsName},service.targetPort=${targetPort},nameOverride=${appName},fullnameOverride=${deploymentName}`,
+    `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
   const repo = webhook.repository.full_name
-  const prNr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.useSource = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
-    COMMENT: `Preview Environment is set up: <a href="https://${previewUrl}" target="_blank">${previewUrl}</a>`,
+    COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
     COMMENTS_URL: commentsUrl,
     TOKEN: JSON.parse(payload).token
   }
@@ -129,7 +134,7 @@ async function runCheckSuite (payload, secrets) {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-    prCommenter.run()
+    if (!prodDeploy) { prCommenter.run() }
   } catch (err) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
