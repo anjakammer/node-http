@@ -19,42 +19,18 @@ async function checkRequested (e, p) {
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
-  if (pr.length === 0 && !prodDeploy && payload.body.action !== 'rerequested') {
-    // re-request the check, to get the pr-id
-    return rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
-  } else {
-    prNr = payload.body.check_suite.pull_requests[0].number
-    registerCheckSuite(e.payload)
+  if (pr.length !== 0 || prodDeploy) {
+    prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
+  } else if (payload.body.action !== 'rerequested') {
+    rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   }
-}
-
-function registerCheckSuite (payload) {
-  return Group.runEach([
-    new RegisterCheck(buildStage, payload),
-    new RegisterCheck(testStage, payload),
-    new RegisterCheck(deployStage, payload)
-  ]).catch(err => { console.log(err) })
-}
-
-function sendSignal ({ stage, logs, conclusion, payload }) {
-  const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
-  assertResult.imageForcePull = true
-  assertResult.env = {
-    CHECK_PAYLOAD: payload,
-    CHECK_NAME: stage,
-    CHECK_TITLE: 'Description'
-  }
-  assertResult.env.CHECK_CONCLUSION = conclusion
-  assertResult.env.CHECK_SUMMARY = `${stage} ${conclusion}`
-  assertResult.env.CHECK_TEXT = logs
-  return assertResult.run()
-    .catch(err => { console.log(err) })
 }
 
 async function runCheckSuite (payload, secrets) {
+  registerCheckSuite(payload)
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
@@ -79,7 +55,7 @@ async function runCheckSuite (payload, secrets) {
   test.useSource = false
   test.tasks = [
     `echo "Running Tests"`,
-    'npm test'
+    'npm test' // TODO test call needs to be declared in test.yaml
   ]
 
   const targetPort = 8080 // TODO fetch this from dockerfile
@@ -138,6 +114,29 @@ async function runCheckSuite (payload, secrets) {
   } catch (err) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
+}
+
+function registerCheckSuite (payload) {
+  return Group.runEach([
+    new RegisterCheck(buildStage, payload),
+    new RegisterCheck(testStage, payload),
+    new RegisterCheck(deployStage, payload)
+  ]).catch(err => { console.log(err) })
+}
+
+function sendSignal ({ stage, logs, conclusion, payload }) {
+  const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
+  assertResult.imageForcePull = true
+  assertResult.env = {
+    CHECK_PAYLOAD: payload,
+    CHECK_NAME: stage,
+    CHECK_TITLE: 'Description'
+  }
+  assertResult.env.CHECK_CONCLUSION = conclusion
+  assertResult.env.CHECK_SUMMARY = `${stage} ${conclusion}`
+  assertResult.env.CHECK_TEXT = logs
+  return assertResult.run()
+    .catch(err => { console.log(err) })
 }
 
 function rerequestCheckSuite (url, token, ghAppName) {
