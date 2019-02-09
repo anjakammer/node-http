@@ -30,6 +30,7 @@ async function checkRequested (e, p) {
 }
 
 async function runCheckSuite (payload, secrets) {
+  registerCheckSuite(payload)
   const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
   parse.env.DIR = '/src/.anya'
   parse.imageForcePull = true
@@ -38,13 +39,12 @@ async function runCheckSuite (payload, secrets) {
   try {
     let result = await parse.run()
     config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
-    sendSignal({ stage: 'parsing', logs: config, conclusion: success, payload })
+    sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
     return
   }
 
-  registerCheckSuite(payload)
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
