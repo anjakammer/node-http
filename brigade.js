@@ -39,7 +39,8 @@ async function runCheckSuite (payload, secrets) {
 
   try {
     let result = await parse.run()
-    config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
+    config = result.substring(result.indexOf('{') - 1, result.lastIndexOf('}'))
+    // config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
     sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
