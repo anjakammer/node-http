@@ -10,6 +10,7 @@ const cancelled = 'cancelled'
 const success = 'success'
 let prodDeploy = false
 let prNr = 0
+let config = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -21,6 +22,7 @@ async function checkRequested (e, p) {
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
+    await parseConfig(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
@@ -29,14 +31,26 @@ async function checkRequested (e, p) {
   }
 }
 
+async function parseConfig (payload) {
+  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.env.DIR = '/src/anya'
+  parse.env.EXT = '.yaml'
+  parse.imageForcePull = true
+  parse.run()
+    .then((result) => {
+      config = result.toString()
+      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
+      console.log(config)
+    })
+    .catch(err => { throw err })
+}
+
 async function runCheckSuite (payload, secrets) {
   registerCheckSuite(payload)
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
-
-  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
@@ -102,7 +116,7 @@ async function runCheckSuite (payload, secrets) {
   }
 
   try {
-    result = await parse.run()
+    result = await test.run()
     sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
