@@ -98,8 +98,9 @@ async function runCheckSuite (payload, secrets) {
   try {
     result = await parse.run()
     let config = result.toString()
-    config = config.substring(config.indexOf('{') - 1, config.lastIndexOf('}'))
-    // config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}')))
+    config = config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1)
+    console.log(config)
+    // config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}')+ 1))
     return sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
   } catch (err) {
     sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
