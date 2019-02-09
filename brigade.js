@@ -1,15 +1,15 @@
-const { events, Job } = require('brigadier')
-const eachSeries = require('async/eachSeries')
+const { events, Job, Group } = require('brigadier')
 const request = require('request')
 
-const checkRunImage = 'anjakammer/brigade-github-check-run:latest'
+const checkRunImage = 'deis/brigade-github-check-run:latest'
 const buildStage = '1-Build'
 const testStage = '2-Test'
 const deployStage = '3-Deploy'
 const failure = 'failure'
 const cancelled = 'cancelled'
 const success = 'success'
-const stages = [buildStage, testStage, deployStage]
+let prodDeploy = false
+let prNr = 0
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -18,36 +18,25 @@ async function checkRequested (e, p) {
   console.log('Check-Suite requested')
   const payload = JSON.parse(e.payload)
   const pr = payload.body.check_suite.pull_requests
-  if (pr.length === 0) {
+  prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
+  if (pr.length === 0 && !prodDeploy && payload.body.action !== 'rerequested') {
     // re-request the check, to get the pr-id
-    if (payload.body.action !== 'rerequested') {
-      rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
-    } // ignore all else
+    return rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   } else {
-    await registerCheckSuite(e.payload)
+    prNr = payload.body.check_suite.pull_requests[0].number
+    registerCheckSuite(e.payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   }
 }
 
-async function registerCheckSuite (payload) {
-  await eachSeries(stages, (check, next) => {
-    console.log(`register-${check}`)
-
-    const registerCheck = new Job(`register-${check}`.toLowerCase(), checkRunImage)
-    registerCheck.imageForcePull = true
-    registerCheck.env = {
-      CHECK_PAYLOAD: payload,
-      CHECK_NAME: check,
-      CHECK_TITLE: 'Description',
-      CHECK_SUMMARY: `${check} scheduled`
-    }
-
-    registerCheck.run()
-      .then(() => { next() })
-      .catch(err => { console.log(err) })
-  })
+function registerCheckSuite (payload) {
+  return Group.runEach([
+    new RegisterCheck(buildStage, payload),
+    new RegisterCheck(testStage, payload),
+    new RegisterCheck(deployStage, payload)
+  ]).catch(err => { console.log(err) })
 }
 
 function sendSignal ({ stage, logs, conclusion, payload }) {
@@ -68,68 +57,57 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
 async function runCheckSuite (payload, secrets) {
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
-  const repoName = secrets.buildRepoName
-  const imageTag = webhook.check_suite.head_sha
-//  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
-  const imageName = `gcr.io/${repoName}/${appName}:${imageTag}`
+  const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
+  const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
-//  const build = new Job(buildStage.toLowerCase(), 'gcr.io/kaniko-project/executor:latest')
-//  build.args = [
-//    `-d=${imageName}`,
-//    '-c=/src'
-//  ]
-
-  var driver = 'overlay'
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
-  build.env.DOCKER_USER = secrets.DOCKER_USER
-  build.env.DOCKER_PASS = secrets.DOCKER_PASS
-  build.env.DOCKER_REGISTRY = secrets.DOCKER_REGISTRY // docker.io
   build.env = {
-    DOCKER_DRIVER: driver
+    DOCKER_DRIVER: 'overlay'
   }
   build.tasks = [
-    'dockerd-entrypoint.sh &',
+    'dockerd-entrypoint.sh > /dev/null 2>&1 &',
     'sleep 20',
     'cd /src',
+    `echo ${secrets.DOCKER_PASS} | docker login -u ${secrets.DOCKER_USER} --password-stdin ${secrets.DOCKER_REGISTRY} > /dev/null 2>&1`,
     `docker build -t ${imageName} .`,
-    'docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY',
     `docker push ${imageName}`
   ]
 
   const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
+  test.useSource = false
   test.tasks = [
     `echo "Running Tests"`,
     'npm test'
   ]
 
-  const previewUrl = `${secrets.hostName}/preview/${appName}/${imageTag}`
-  const previewPath = appName + '\\/' + imageTag
-  const deploy = new Job(deployStage.toLowerCase(), 'gcr.io/cloud-builders/kubectl')
+  const targetPort = 8080 // TODO fetch this from dockerfile
+  const host = prodDeploy ? secrets.prodHost : secrets.prevHost
+  const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
+  const url = `${host}${path}`
+  const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
+  const deploymentName = prodDeploy ? `${appName}-${imageTag}` : `${appName}-${imageTag}-preview`
+  const namespace = prodDeploy ? 'production' : 'preview'
+  const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
+  deploy.useSource = false
   deploy.privileged = true
   deploy.serviceAccount = 'anya-deployer'
   deploy.tasks = [
-    `echo "Deploying ${appName}:${imageTag}"`,
-    `kubectl run ${appName}-${imageTag}-preview --image=${imageName} --labels="app=${appName}-${imageTag}-preview" --port=80 -n preview`,
-    'cd /src/manifest',
-    `sed -i -e 's/previewPath/${previewPath}/g' -e 's/app-name-app-version/${appName}-${imageTag}/g' ingress.yaml`,
-    `sed -i -e 's/app-name-app-version/${appName}-${imageTag}/g' service.yaml`,
-    'kubectl apply -f service.yaml -n preview',
-    'kubectl apply -f ingress.yaml -n preview',
-    `echo "Status of ${appName}:${imageTag}:"`,
-    `echo "Preview URL: ${previewUrl}"`
+    'helm init --client-only > /dev/null 2>&1',
+    'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
+    `helm upgrade --install ${deploymentName} anya/deployment-template --namespace ${namespace} --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${path},ingress.host=${host},ingress.tlsSecretName=${tlsName},service.targetPort=${targetPort},nameOverride=${appName},fullnameOverride=${deploymentName}`,
+    `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
   const repo = webhook.repository.full_name
-  const prNr = webhook.check_suite.pull_requests[0].number
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
-
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
+  prCommenter.useSource = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
-    COMMENT: `Preview Environment is set up: [${previewUrl}](https://${previewUrl})`,
+    COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
     COMMENTS_URL: commentsUrl,
     TOKEN: JSON.parse(payload).token
   }
@@ -156,7 +134,7 @@ async function runCheckSuite (payload, secrets) {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-    prCommenter.run()
+    if (!prodDeploy) { prCommenter.run() }
   } catch (err) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
   }
@@ -179,6 +157,19 @@ function rerequestCheckSuite (url, token, ghAppName) {
   }).on('error', function (err) {
     console.log(err)
   })
+}
+
+class RegisterCheck extends Job {
+  constructor (check, payload) {
+    super(`register-${check}`.toLowerCase(), checkRunImage)
+    this.useSource = false
+    this.env = {
+      CHECK_PAYLOAD: payload,
+      CHECK_NAME: check,
+      CHECK_TITLE: 'Description',
+      CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
 }
 
 module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
