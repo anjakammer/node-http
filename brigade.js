@@ -21,7 +21,7 @@ async function checkRequested (e, p) {
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    registerCheckSuite(payload)
+    await registerCheckSuite(payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
@@ -102,8 +102,7 @@ async function runCheckSuite (payload, secrets) {
     // config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
     sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
   } catch (err) {
-    await sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
-    return
+    sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
   }
 
   try {
