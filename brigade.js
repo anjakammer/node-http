@@ -10,6 +10,7 @@ const cancelled = 'cancelled'
 const success = 'success'
 let prodDeploy = false
 let prNr = 0
+let config = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -21,21 +22,32 @@ async function checkRequested (e, p) {
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    runCheckSuite(e.payload, p.secrets)
-      .then(() => { return console.log('Finished Check-Suite') })
-      .catch((err) => { console.log(err) })
+    parseConfig(e.payload)
+      .then(() => {
+        runCheckSuite(e.payload, p.secrets)
+          .then(() => { return console.log('Finished Check-Suite') })
+          .catch((err) => { console.log(err) })
+      })
+      .catch((err) => { return console.log(err) })
   } else if (payload.body.action !== 'rerequested') {
     rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   }
 }
-
-async function runCheckSuite (payload, secrets) {
-  registerCheckSuite(payload)
+async function parseConfig (payload) {
   const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
   parse.imageForcePull = true
+  let result = await parse.run().toString()
+    .then(() => {
+      config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}') + 1))
+      console.log(config)
+    })
+    .catch(err => { throw err })
+}
 
+async function runCheckSuite (payload, secrets) {
+  registerCheckSuite(payload)
   const webhook = JSON.parse(payload).body
   const appName = webhook.repository.name
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
@@ -94,17 +106,6 @@ async function runCheckSuite (payload, secrets) {
   }
 
   let result
-
-  try {
-    result = await parse.run()
-    let config = result.toString()
-    config = config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1)
-    console.log(config)
-    // config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}')+ 1))
-    sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
-  } catch (err) {
-    sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-  }
 
   try {
     result = await build.run()
