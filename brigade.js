@@ -95,15 +95,16 @@ async function runCheckSuite (payload, secrets) {
 
   let result
 
-  try {
+  // try {
     result = await parse.run()
     let config = result.substring(result.indexOf('{') - 1, result.lastIndexOf('}'))
     console.log(config)
     // config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
-    sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
-  } catch (err) {
-    sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
-  }
+    return sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
+  // }
+  // catch (err) {
+  //   sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
+  // }
 
   try {
     result = await build.run()
