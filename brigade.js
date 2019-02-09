@@ -32,7 +32,7 @@ async function checkRequested (e, p) {
 async function runCheckSuite (payload, secrets) {
   registerCheckSuite(payload)
   const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
-  parse.env.DIR = '/src/.anya'
+  parse.env.DIR = '/src/anya'
   parse.env.EXT = 'yaml'
   parse.imageForcePull = true
   let config = ''
