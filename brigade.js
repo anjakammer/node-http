@@ -36,6 +36,8 @@ async function runCheckSuite (payload, secrets) {
   const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
+  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
+
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
   build.env = {
@@ -100,7 +102,7 @@ async function runCheckSuite (payload, secrets) {
   }
 
   try {
-    result = await test.run()
+    result = await parse.run()
     sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
