@@ -21,7 +21,6 @@ async function checkRequested (e, p) {
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    await registerCheckSuite(payload)
     runCheckSuite(e.payload, p.secrets)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
@@ -31,6 +30,7 @@ async function checkRequested (e, p) {
 }
 
 async function runCheckSuite (payload, secrets) {
+  registerCheckSuite(payload)
   const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
@@ -95,16 +95,15 @@ async function runCheckSuite (payload, secrets) {
 
   let result
 
-  // try {
-    result = await parse.run().toString()
-    let config = result.substring(result.indexOf('{') - 1, result.lastIndexOf('}'))
-    console.log(config)
-    // config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}')))
+  try {
+    result = await parse.run()
+    let config = result.toString()
+    config = config.substring(config.indexOf('{') - 1, config.lastIndexOf('}'))
+    // config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}')))
     return sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
-  // }
-  // catch (err) {
-  //   sendSignal({ stage: testStage, logs: 'pipeline configuration is missing', conclusion: failure, payload })
-  // }
+  } catch (err) {
+    sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
+  }
 
   try {
     result = await build.run()
