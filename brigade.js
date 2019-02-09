@@ -84,8 +84,8 @@ async function runCheckSuite (payload, secrets) {
 
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
-  const path = prodDeploy ? secrets.prodPath : `preview/${appName}/${imageTag}`
-  const url = `${host}/${path}`
+  const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
+  const url = `${host}${path}`
   const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
   const deploymentName = prodDeploy ? `${appName}-${imageTag}` : `${appName}-${imageTag}-preview`
   const namespace = prodDeploy ? 'production' : 'preview'
