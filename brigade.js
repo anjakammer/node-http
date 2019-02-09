@@ -101,7 +101,7 @@ async function runCheckSuite (payload, secrets) {
     config = config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1)
     console.log(config)
     // config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}')+ 1))
-    return sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
+    sendSignal({ stage: testStage, logs: config, conclusion: success, payload })
   } catch (err) {
     sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
   }
