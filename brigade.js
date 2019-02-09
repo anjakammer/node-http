@@ -22,25 +22,24 @@ async function checkRequested (e, p) {
   prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    parseConfig(e.payload)
-      .then(() => {
-        runCheckSuite(e.payload, p.secrets)
-          .then(() => { return console.log('Finished Check-Suite') })
-          .catch((err) => { console.log(err) })
-      })
-      .catch((err) => { return console.log(err) })
+    await parseConfig(e.payload)
+    runCheckSuite(e.payload, p.secrets)
+      .then(() => { return console.log('Finished Check-Suite') })
+      .catch((err) => { console.log(err) })
   } else if (payload.body.action !== 'rerequested') {
     rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
   }
 }
+
 async function parseConfig (payload) {
   const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
   parse.imageForcePull = true
-  let result = await parse.run().toString()
-    .then(() => {
-      config = JSON.parse(result.substring(result.indexOf('{') - 1, result.lastIndexOf('}') + 1))
+  parse.run()
+    .then((result) => {
+      config = result.toString()
+      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
       console.log(config)
     })
     .catch(err => { throw err })
