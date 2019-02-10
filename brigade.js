@@ -17,6 +17,9 @@ let webhook = ''
 let secrets = ''
 let slackNotifyOnSuccess = false
 let slackNotifyOnFailure = false
+let previewUrlAsComment = false
+let purgePreviewDeployments = false // TODO
+let testStageTasks = []
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -61,10 +64,7 @@ async function runCheckSuite () {
   const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
   test.useSource = false
-  test.tasks = [
-    `echo "Running Tests"`,
-    'npm test' // TODO test call needs to be declared in test.yaml
-  ]
+  test.tasks = testStageTasks
 
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
@@ -96,34 +96,34 @@ async function runCheckSuite () {
     TOKEN: webhook.token
   }
 
-  // let result
-  //
-  // try {
-  //   result = await build.run()
-  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
-  // } catch (err) {
-  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
-  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  // }
-  //
-  // try {
-  //   result = await test.run()
-  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
-  // } catch (err) {
-  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
-  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  // }
-  //
-  // try {
-  //   result = await deploy.run()
-  //   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-  //   if (!prodDeploy) { prCommenter.run() }
-  //   if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
-  // } catch (err) {
-  //   if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
-  //   return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
-  // }
+  let result
+
+  try {
+    result = await build.run()
+    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
+  } catch (err) {
+    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
+    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+  }
+
+  try {
+    result = await test.run()
+    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
+  } catch (err) {
+    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+  }
+
+  try {
+    result = await deploy.run()
+    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
+    if (!prodDeploy && previewUrlAsComment) { prCommenter.run() }
+    if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
+  } catch (err) {
+    if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
+    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
+  }
 }
 
 function registerCheckSuite () {
@@ -156,10 +156,12 @@ async function parseConfig () {
   parse.run()
     .then((result) => {
       config = result.toString()
-      console.log(config)
       config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
-      slackNotifyOnSuccess = true // TODO
-      slackNotifyOnFailure = true // TODO
+      slackNotifyOnSuccess = config.deploy.onSuccess.slackNotify
+      slackNotifyOnFailure = config.deploy.onFailure.slackNotify
+      previewUrlAsComment = config.deploy.onSuccess.previewUrlAsComment
+      purgePreviewDeployments = config.deploy.pullRequest.onClose.purgePreviewDeployments
+      testStageTasks = config.test.tasks
     })
     .catch(err => { throw err })
 }

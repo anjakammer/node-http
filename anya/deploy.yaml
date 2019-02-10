@@ -1,9 +1,10 @@
-postDeployTests: false
+onSuccess:
+  slackNotify: true
+  previewUrlAsComment: true
+
+onFailure:
+  slackNotify: true
 
 pullRequest:
-  
-  onSuccess:
-    previewUrlAsComment: true
-
   onClose:
     purgePreviewDeployments: true
