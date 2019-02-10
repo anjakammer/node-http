@@ -113,7 +113,7 @@ async function runCheckSuite (config) {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
     if (!prodDeploy && config.previewUrlAsComment) { prCommenter.run() }
-    if (config.slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
+    if (config.slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<https://${url}>`) }
   } catch (err) {
     if (config.slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
