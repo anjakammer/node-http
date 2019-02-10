@@ -17,14 +17,14 @@ let secrets = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
-// events.on('check_run:rerequested', checkRequested) // TODO
+events.on('check_run:rerequested', checkRequested)
 events.on('pull_request:closed', prClosed) // TODO
 
 async function prClosed (e, p) {
   console.log('PullRequest closed')
   let config = await parseConfig()
   if (config.purgePreviewDeployments) {
-    console.log('Dummy function - whooo')
+    console.log('Dummy function - whooo purging')
     webhook = JSON.parse(e.payload)
     secrets = p.secrets
     prNr = webhook.body.check_suite.pull_requests[0].number
@@ -56,46 +56,15 @@ async function runCheckSuite (config) {
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
-
-  const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
-  build.privileged = true
-  build.env.DOCKER_DRIVER = 'overlay'
-  build.tasks = [
-    'dockerd-entrypoint.sh > /dev/null 2>&1 &',
-    'sleep 20',
-    'cd /src',
-    `echo ${secrets.DOCKER_PASS} | docker login -u ${secrets.DOCKER_USER} --password-stdin ${secrets.DOCKER_REGISTRY} > /dev/null 2>&1`,
-    `docker build -t ${imageName} .`,
-    `docker push ${imageName}`
-  ]
-
-  const test = new Job(testStage.toLowerCase(), imageName)
-  test.imageForcePull = true
-  test.useSource = false
-  test.tasks = config.testStageTasks
-
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
   const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
   const url = `${host}${path}`
-  const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
-  const deploymentName = prodDeploy ? `${appName}` : `${appName}-${imageTag}-preview`
-  const namespace = prodDeploy ? 'production' : 'preview'
-  const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
-  deploy.useSource = false
-  deploy.privileged = true
-  deploy.serviceAccount = 'anya-deployer'
-  deploy.tasks = [
-    'helm init --client-only > /dev/null 2>&1',
-    'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
-    `helm upgrade --install ${deploymentName} anya/deployment-template --namespace ${namespace} --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${path},ingress.host=${host},ingress.tlsSecretName=${tlsName},service.targetPort=${targetPort},nameOverride=${appName},fullnameOverride=${deploymentName}`,
-    `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
-  ]
 
   let result
 
   try {
-    result = await build.run()
+    result = await new Build(imageName).run()
   } catch (err) {
     await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
     await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
@@ -104,7 +73,7 @@ async function runCheckSuite (config) {
   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
 
   try {
-    result = await test.run()
+    result = await new Test(config.testStageTasks, imageName).run()
   } catch (err) {
     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
@@ -112,17 +81,37 @@ async function runCheckSuite (config) {
   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
 
   try {
-    result = await deploy.run()
+    result = await new Deploy(appName, imageName, imageTag, targetPort, host, path, url).run()
   } catch (err) {
     if (config.slackNotifyOnFailure) { slackNotify(`Failed Deployment of ${appName}`, imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
   if (!prodDeploy && config.previewUrlAsComment) {
-    const prComment = new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`)
-    prComment.run()
+    new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`).run()
   }
   if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
+}
+
+async function parseConfig () {
+  const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.imageForcePull = true
+  parse.env.DIR = '/src/anya'
+  parse.env.EXT = '.yaml'
+  return parse.run()
+    .then((result) => {
+      let config = result.toString()
+      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
+      return {
+        slackNotifyOnSuccess: config.deploy.onSuccess.slackNotify || false,
+        slackNotifyOnFailure: config.deploy.onFailure.slackNotify || false,
+        previewUrlAsComment: config.deploy.onSuccess.previewUrlAsComment || false,
+        // TODO purge Preview deploys
+        purgePreviewDeployments: config.deploy.pullRequest.onClose.purgePreviewDeployments || false,
+        testStageTasks: config.test.tasks || false
+      }
+    })
+    .catch(err => { throw err })
 }
 
 function registerCheckSuite () {
@@ -147,6 +136,49 @@ class RegisterCheck extends Job {
   }
 }
 
+class Build extends Job {
+  constructor (imageName) {
+    super(buildStage.toLowerCase(), 'docker:stable-dind')
+    this.privileged = true
+    this.env.DOCKER_DRIVER = 'overlay'
+    this.tasks = [
+      'dockerd-entrypoint.sh > /dev/null 2>&1 &',
+      'sleep 20',
+      'cd /src',
+      `echo ${secrets.DOCKER_PASS} | docker login -u ${secrets.DOCKER_USER} --password-stdin ${secrets.DOCKER_REGISTRY} > /dev/null 2>&1`,
+      `docker build -t ${imageName} .`,
+      `docker push ${imageName}`
+    ]
+  }
+}
+
+class Test extends Job {
+  constructor (testStageTasks, imageName) {
+    super(testStage.toLowerCase(), imageName)
+    this.imageForcePull = true
+    this.useSource = false
+    this.tasks = testStageTasks
+  }
+}
+
+class Deploy extends Job {
+  constructor (appName, imageName, imageTag, targetPort, host, path, url) {
+    const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
+    const deploymentName = prodDeploy ? `${appName}` : `${appName}-${imageTag}-preview`
+    const namespace = prodDeploy ? 'production' : 'preview'
+    super(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
+    this.useSource = false
+    this.privileged = true
+    this.serviceAccount = 'anya-deployer'
+    this.tasks = [
+      'helm init --client-only > /dev/null 2>&1',
+      'helm repo add anya https://storage.googleapis.com/anya-deployment/charts > /dev/null 2>&1',
+      `helm upgrade --install ${deploymentName} anya/deployment-template --namespace ${namespace} --set-string image.repository=${secrets.DOCKER_REGISTRY}/${secrets.DOCKER_REPO}/${appName},image.tag=${imageTag},ingress.path=${path},ingress.host=${host},ingress.tlsSecretName=${tlsName},service.targetPort=${targetPort},nameOverride=${appName},fullnameOverride=${deploymentName}`,
+      `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
+    ]
+  }
+}
+
 class CommentPR extends Job {
   constructor (message) {
     const repo = webhook.body.repository.full_name
@@ -161,27 +193,6 @@ class CommentPR extends Job {
       TOKEN: webhook.token
     }
   }
-}
-
-async function parseConfig () {
-  const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
-  parse.imageForcePull = true
-  parse.env.DIR = '/src/anya'
-  parse.env.EXT = '.yaml'
-  return parse.run()
-    .then((result) => {
-      let config = result.toString()
-      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
-      return {
-        slackNotifyOnSuccess: config.deploy.onSuccess.slackNotify || false,
-        slackNotifyOnFailure: config.deploy.onFailure.slackNotify || false,
-        previewUrlAsComment: config.deploy.onSuccess.previewUrlAsComment || false,
-        // TODO purge Preview deploys
-        purgePreviewDeployments: config.deploy.pullRequest.onClose.purgePreviewDeployments || false,
-        testStageTasks: config.test.tasks || false
-      }
-    })
-    .catch(err => { throw err })
 }
 
 function sendSignal ({ stage, logs, conclusion }) {
