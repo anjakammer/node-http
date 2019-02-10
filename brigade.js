@@ -71,7 +71,7 @@ async function runCheckSuite () {
   const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
   const url = `${host}${path}`
   const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
-  const deploymentName = prodDeploy ? `${appName}-${imageTag}` : `${appName}-${imageTag}-preview`
+  const deploymentName = prodDeploy ? `${appName}` : `${appName}-${imageTag}-preview`
   const namespace = prodDeploy ? 'production' : 'preview'
   const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
   deploy.useSource = false
@@ -85,8 +85,9 @@ async function runCheckSuite () {
   ]
 
   const repo = webhook.body.repository.full_name
-  const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
+  const prCommenter = new Job('pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.storage.enabled = false
+  prCommenter.useSource = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
@@ -137,6 +138,7 @@ class RegisterCheck extends Job {
   constructor (check) {
     super(`register-${check}`.toLowerCase(), checkRunImage)
     this.storage.enabled = false
+    this.useSource = false
     this.env = {
       CHECK_PAYLOAD: payload,
       CHECK_NAME: check,
@@ -162,8 +164,9 @@ async function parseConfig () {
 }
 
 function sendSignal ({ stage, logs, conclusion }) {
-  const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
+  const assertResult = new Job(`result-of-${stage}`.toLowerCase(), checkRunImage)
   assertResult.storage.enabled = false
+  assertResult.useSource = false
   assertResult.env = {
     CHECK_PAYLOAD: payload,
     CHECK_NAME: stage,
@@ -176,7 +179,7 @@ function sendSignal ({ stage, logs, conclusion }) {
     .catch(err => { console.log(err) })
 }
 
-function rerequestCheckSuite (url, token, ghAppName) {
+function rerequestCheckSuite () {
   console.log('No PR-id found. Will re-request the check_suite.')
   request({
     uri: `${webhook.body.check_suite.url}/rerequest`,
@@ -196,8 +199,9 @@ function rerequestCheckSuite (url, token, ghAppName) {
 }
 
 function slackNotify (title, message) {
-  const slack = new Job('5-slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+  const slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
   slack.storage.enabled = false
+  slack.useSource = false
   slack.env = {
     SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
     SLACK_CHANNEL: secrets.SLACK_CHANNEL,
