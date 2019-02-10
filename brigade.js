@@ -85,7 +85,7 @@ async function runCheckSuite () {
   const repo = webhook.body.repository.full_name
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
-  prCommenter.useSource = false
+  prCommenter.storage.enabled = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
@@ -133,7 +133,7 @@ function registerCheckSuite () {
 class RegisterCheck extends Job {
   constructor (check) {
     super(`register-${check}`.toLowerCase(), checkRunImage)
-    this.useSource = false
+    this.storage.enabled = false
     this.env = {
       CHECK_PAYLOAD: payload,
       CHECK_NAME: check,
@@ -160,6 +160,7 @@ async function parseConfig () {
 function sendSignal ({ stage, logs, conclusion }) {
   const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
   assertResult.imageForcePull = true
+  assertResult.storage.enabled = false
   assertResult.env = {
     CHECK_PAYLOAD: payload,
     CHECK_NAME: stage,
@@ -191,4 +192,19 @@ function rerequestCheckSuite (url, token, ghAppName) {
   })
 }
 
-module.exports = { parseConfig, registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
+function slackNotify () {
+  var slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+  slack.storage.enabled = false
+  slack.env = {
+    SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
+    SLACK_CHANNEL: 'anya_signals',
+    SLACK_USERNAME: 'MyBot',
+    SLACK_TITLE: 'Message Title',
+    SLACK_MESSAGE: 'Message Body',
+    SLACK_COLOR: '#0000ff',
+    SLACK_ICON: 'https://storage.googleapis.com/anya-deployment/anya-logo.png'
+  }
+  slack.run()
+}
+
+module.exports = { parseConfig, registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite, slackNotify }
