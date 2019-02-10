@@ -32,7 +32,7 @@ async function checkRequested (e, p) {
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
     await parseConfig()
-    runCheckSuite()
+    return runCheckSuite()
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
@@ -96,34 +96,34 @@ async function runCheckSuite () {
     TOKEN: webhook.token
   }
 
-  let result
-
-  try {
-    result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
-  } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  }
-
-  try {
-    result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
-  } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  }
-
-  try {
-    result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-    if (!prodDeploy) { prCommenter.run() }
-    if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
-  } catch (err) {
-    if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
-  }
+  // let result
+  //
+  // try {
+  //   result = await build.run()
+  //   sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
+  // } catch (err) {
+  //   await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
+  //   await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+  // }
+  //
+  // try {
+  //   result = await test.run()
+  //   sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
+  // } catch (err) {
+  //   await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
+  //   return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+  // }
+  //
+  // try {
+  //   result = await deploy.run()
+  //   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
+  //   if (!prodDeploy) { prCommenter.run() }
+  //   if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
+  // } catch (err) {
+  //   if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
+  //   return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
+  // }
 }
 
 function registerCheckSuite () {
