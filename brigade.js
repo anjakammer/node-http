@@ -40,6 +40,7 @@ async function checkRequested (e, p) {
 
 async function runCheckSuite () {
   registerCheckSuite()
+  slackNotify()
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
@@ -193,7 +194,7 @@ function rerequestCheckSuite (url, token, ghAppName) {
 }
 
 function slackNotify () {
-  var slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+  const slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
   slack.storage.enabled = false
   slack.env = {
     SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
