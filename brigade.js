@@ -118,7 +118,10 @@ async function runCheckSuite (config) {
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-  if (!prodDeploy && config.previewUrlAsComment) { new CommentPR().run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`) }
+  if (!prodDeploy && config.previewUrlAsComment) {
+    const prComment = new CommentPR()
+    prComment.run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`)
+  }
   if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
 }
 
