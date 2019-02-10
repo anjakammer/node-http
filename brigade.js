@@ -8,55 +8,44 @@ const deployStage = '3-Deploy'
 const failure = 'failure'
 const cancelled = 'cancelled'
 const success = 'success'
+
 let prodDeploy = false
 let prNr = 0
-let config = ''
+let payload = ''
+let webhook = ''
+let secrets = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 
 async function checkRequested (e, p) {
   console.log('Check-Suite requested')
-  const payload = JSON.parse(e.payload)
-  const pr = payload.body.check_suite.pull_requests
-  prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
+  payload = e.payload
+  webhook = JSON.parse(payload)
+  secrets = p.secrets
+
+  const pr = webhook.body.check_suite.pull_requests
+  prodDeploy = webhook.body.check_suite.head_branch === secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
-    prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    await parseConfig(e.payload)
-    runCheckSuite(e.payload, p.secrets)
+    prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
+    let config = await parseConfig()
+    return runCheckSuite(config)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
-  } else if (payload.body.action !== 'rerequested') {
-    rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
+  } else if (webhook.body.action !== 'rerequested') {
+    return rerequestCheckSuite() // TODO debug this
   }
 }
 
-async function parseConfig (payload) {
-  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
-  parse.env.DIR = '/src/anya'
-  parse.env.EXT = '.yaml'
-  parse.imageForcePull = true
-  parse.run()
-    .then((result) => {
-      config = result.toString()
-      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
-      console.log(config)
-    })
-    .catch(err => { throw err })
-}
-
-async function runCheckSuite (payload, secrets) {
-  registerCheckSuite(payload)
-  const webhook = JSON.parse(payload).body
-  const appName = webhook.repository.name
-  const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
+async function runCheckSuite (config) {
+  registerCheckSuite()
+  const appName = webhook.body.repository.name
+  const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
-  build.env = {
-    DOCKER_DRIVER: 'overlay'
-  }
+  build.env.DOCKER_DRIVER = 'overlay'
   build.tasks = [
     'dockerd-entrypoint.sh > /dev/null 2>&1 &',
     'sleep 20',
@@ -69,17 +58,14 @@ async function runCheckSuite (payload, secrets) {
   const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
   test.useSource = false
-  test.tasks = [
-    `echo "Running Tests"`,
-    'npm test' // TODO test call needs to be declared in test.yaml
-  ]
+  test.tasks = config.testStageTasks
 
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
   const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
   const url = `${host}${path}`
   const tlsName = prodDeploy ? secrets.prodTLSName : secrets.prevTLSName
-  const deploymentName = prodDeploy ? `${appName}-${imageTag}` : `${appName}-${imageTag}-preview`
+  const deploymentName = prodDeploy ? `${appName}` : `${appName}-${imageTag}-preview`
   const namespace = prodDeploy ? 'production' : 'preview'
   const deploy = new Job(deployStage.toLowerCase(), 'lachlanevenson/k8s-helm')
   deploy.useSource = false
@@ -92,57 +78,95 @@ async function runCheckSuite (payload, secrets) {
     `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
-  const repo = webhook.repository.full_name
-  const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
-  const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
+  const repo = webhook.body.repository.full_name
+  const prCommenter = new Job('pr-comment', 'anjakammer/brigade-pr-comment')
+  prCommenter.storage.enabled = false
   prCommenter.useSource = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
-    COMMENTS_URL: commentsUrl,
-    TOKEN: JSON.parse(payload).token
+    COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
+    TOKEN: webhook.token
   }
 
   let result
 
   try {
     result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
   } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
+    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
 
   try {
     result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
   } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
 
   try {
     result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
-    if (!prodDeploy) { prCommenter.run() }
+    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
+    if (!prodDeploy && config.previewUrlAsComment) { prCommenter.run() }
+    if (config.slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<https://${url}>`) }
   } catch (err) {
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
+    if (config.slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
+    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
 }
 
-function registerCheckSuite (payload) {
+function registerCheckSuite () {
   return Group.runEach([
-    new RegisterCheck(buildStage, payload),
-    new RegisterCheck(testStage, payload),
-    new RegisterCheck(deployStage, payload)
+    new RegisterCheck(buildStage),
+    new RegisterCheck(testStage),
+    new RegisterCheck(deployStage)
   ]).catch(err => { console.log(err) })
 }
 
-function sendSignal ({ stage, logs, conclusion, payload }) {
-  const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
-  assertResult.imageForcePull = true
+class RegisterCheck extends Job {
+  constructor (check) {
+    super(`register-${check}`.toLowerCase(), checkRunImage)
+    this.storage.enabled = false
+    this.useSource = false
+    this.env = {
+      CHECK_PAYLOAD: payload,
+      CHECK_NAME: check,
+      CHECK_TITLE: 'Description',
+      CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
+}
+
+async function parseConfig () {
+  const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.imageForcePull = true
+  parse.env.DIR = '/src/anya'
+  parse.env.EXT = '.yaml'
+  return parse.run()
+    .then((result) => {
+      let config = result.toString()
+      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
+      return {
+        slackNotifyOnSuccess: config.deploy.onSuccess.slackNotify || false,
+        slackNotifyOnFailure: config.deploy.onFailure.slackNotify || false,
+        previewUrlAsComment: config.deploy.onSuccess.previewUrlAsComment || false,
+        // TODO purge Preview deploys
+        purgePreviewDeployments: config.deploy.pullRequest.onClose.purgePreviewDeployments || false,
+        testStageTasks: config.test.tasks || false
+      }
+    })
+    .catch(err => { throw err })
+}
+
+function sendSignal ({ stage, logs, conclusion }) {
+  const assertResult = new Job(`result-of-${stage}`.toLowerCase(), checkRunImage)
+  assertResult.storage.enabled = false
+  assertResult.useSource = false
   assertResult.env = {
     CHECK_PAYLOAD: payload,
     CHECK_NAME: stage,
@@ -155,14 +179,14 @@ function sendSignal ({ stage, logs, conclusion, payload }) {
     .catch(err => { console.log(err) })
 }
 
-function rerequestCheckSuite (url, token, ghAppName) {
+function rerequestCheckSuite () {
   console.log('No PR-id found. Will re-request the check_suite.')
   request({
-    uri: `${url}/rerequest`,
+    uri: `${webhook.body.check_suite.url}/rerequest`,
     json: true,
     headers: {
-      'Authorization': `token ${token}`,
-      'User-Agent': ghAppName,
+      'Authorization': `token ${webhook.token}`,
+      'User-Agent': secrets.ghAppName,
       'Accept': 'application/vnd.github.antiope-preview+json'
     },
     method: 'POST'
@@ -174,17 +198,20 @@ function rerequestCheckSuite (url, token, ghAppName) {
   })
 }
 
-class RegisterCheck extends Job {
-  constructor (check, payload) {
-    super(`register-${check}`.toLowerCase(), checkRunImage)
-    this.useSource = false
-    this.env = {
-      CHECK_PAYLOAD: payload,
-      CHECK_NAME: check,
-      CHECK_TITLE: 'Description',
-      CHECK_SUMMARY: `${check} scheduled`
-    }
+function slackNotify (title, message) {
+  const slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+  slack.storage.enabled = false
+  slack.useSource = false
+  slack.env = {
+    SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
+    SLACK_CHANNEL: secrets.SLACK_CHANNEL,
+    SLACK_USERNAME: 'anya',
+    SLACK_TITLE: title,
+    SLACK_MESSAGE: message,
+    SLACK_COLOR: '#23B5AF',
+    SLACK_ICON: 'https://storage.googleapis.com/anya-deployment/anya-logo.png'
   }
+  slack.run()
 }
 
-module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
+module.exports = { parseConfig, registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite, slackNotify }
