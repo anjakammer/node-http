@@ -15,6 +15,8 @@ let config = ''
 let payload = ''
 let webhook = ''
 let secrets = ''
+let slackNotifyOnSuccess = false
+let slackNotifyOnFailure = false
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -34,13 +36,12 @@ async function checkRequested (e, p) {
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
-    rerequestCheckSuite(webhook.body.check_suite.url, webhook.token, secrets.ghAppName)
+    rerequestCheckSuite() // TODO debug this
   }
 }
 
 async function runCheckSuite () {
   registerCheckSuite()
-  slackNotify()
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
@@ -84,14 +85,13 @@ async function runCheckSuite () {
   ]
 
   const repo = webhook.body.repository.full_name
-  const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.storage.enabled = false
   prCommenter.env = {
     APP_NAME: secrets.ghAppName,
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
-    COMMENTS_URL: commentsUrl,
+    COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
     TOKEN: webhook.token
   }
 
@@ -118,7 +118,9 @@ async function runCheckSuite () {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
     if (!prodDeploy) { prCommenter.run() }
+    if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
   } catch (err) {
+    if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
 }
@@ -145,14 +147,15 @@ class RegisterCheck extends Job {
 }
 
 async function parseConfig () {
-  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
+  const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
-  parse.imageForcePull = true
   parse.run()
     .then((result) => {
       config = result.toString()
       config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
+      slackNotifyOnSuccess = true // TODO
+      slackNotifyOnFailure = true // TODO
       console.log(config)
     })
     .catch(err => { throw err })
@@ -160,7 +163,6 @@ async function parseConfig () {
 
 function sendSignal ({ stage, logs, conclusion }) {
   const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
-  assertResult.imageForcePull = true
   assertResult.storage.enabled = false
   assertResult.env = {
     CHECK_PAYLOAD: payload,
@@ -177,11 +179,11 @@ function sendSignal ({ stage, logs, conclusion }) {
 function rerequestCheckSuite (url, token, ghAppName) {
   console.log('No PR-id found. Will re-request the check_suite.')
   request({
-    uri: `${url}/rerequest`,
+    uri: `${webhook.body.check_suite.url}/rerequest`,
     json: true,
     headers: {
-      'Authorization': `token ${token}`,
-      'User-Agent': ghAppName,
+      'Authorization': `token ${webhook.token}`,
+      'User-Agent': secrets.ghAppName,
       'Accept': 'application/vnd.github.antiope-preview+json'
     },
     method: 'POST'
@@ -193,16 +195,16 @@ function rerequestCheckSuite (url, token, ghAppName) {
   })
 }
 
-function slackNotify () {
-  const slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+function slackNotify (title, message) {
+  const slack = new Job('5-slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
   slack.storage.enabled = false
   slack.env = {
     SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
-    SLACK_CHANNEL: 'anya_signals',
-    SLACK_USERNAME: 'MyBot',
-    SLACK_TITLE: 'Message Title',
-    SLACK_MESSAGE: 'Message Body',
-    SLACK_COLOR: '#0000ff',
+    SLACK_CHANNEL: secrets.SLACK_CHANNEL,
+    SLACK_USERNAME: 'anya',
+    SLACK_TITLE: title,
+    SLACK_MESSAGE: message,
+    SLACK_COLOR: '#23B5AF',
     SLACK_ICON: 'https://storage.googleapis.com/anya-deployment/anya-logo.png'
   }
   slack.run()
