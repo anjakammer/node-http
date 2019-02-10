@@ -28,7 +28,7 @@ async function prClosed (e, p) {
     webhook = JSON.parse(e.payload)
     secrets = p.secrets
     prNr = webhook.body.check_suite.pull_requests[0].number
-    return CommentPR.run(`Deleted all Previews for PullRequest: ${prNr}`)
+    return new CommentPR(`Deleted all Previews for PullRequest: ${prNr}`).run()
   }
 }
 
@@ -119,8 +119,8 @@ async function runCheckSuite (config) {
   }
   sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
   if (!prodDeploy && config.previewUrlAsComment) {
-    const prComment = new CommentPR()
-    prComment.run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`)
+    const prComment = new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`)
+    prComment.run()
   }
   if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
 }
