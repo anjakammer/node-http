@@ -11,15 +11,9 @@ const success = 'success'
 
 let prodDeploy = false
 let prNr = 0
-let config = ''
 let payload = ''
 let webhook = ''
 let secrets = ''
-let slackNotifyOnSuccess = false
-let slackNotifyOnFailure = false
-let previewUrlAsComment = false
-let purgePreviewDeployments = false // TODO
-let testStageTasks = []
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
@@ -34,8 +28,8 @@ async function checkRequested (e, p) {
   prodDeploy = webhook.body.check_suite.head_branch === secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
     prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
-    await parseConfig()
-    return runCheckSuite()
+    let config = await parseConfig()
+    return runCheckSuite(config)
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
@@ -43,7 +37,7 @@ async function checkRequested (e, p) {
   }
 }
 
-async function runCheckSuite () {
+async function runCheckSuite (config) {
   registerCheckSuite()
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
@@ -64,7 +58,7 @@ async function runCheckSuite () {
   const test = new Job(testStage.toLowerCase(), imageName)
   test.imageForcePull = true
   test.useSource = false
-  test.tasks = testStageTasks
+  test.tasks = config.testStageTasks
 
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
@@ -118,10 +112,10 @@ async function runCheckSuite () {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-    if (!prodDeploy && previewUrlAsComment) { prCommenter.run() }
-    if (slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
+    if (!prodDeploy && config.previewUrlAsComment) { prCommenter.run() }
+    if (config.slackNotifyOnSuccess) { slackNotify('Successful Deployment', `<${url}>`) }
   } catch (err) {
-    if (slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
+    if (config.slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
 }
@@ -155,13 +149,16 @@ async function parseConfig () {
   parse.env.EXT = '.yaml'
   parse.run()
     .then((result) => {
-      config = result.toString()
+      let config = result.toString()
       config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
-      slackNotifyOnSuccess = config.deploy.onSuccess.slackNotify
-      slackNotifyOnFailure = config.deploy.onFailure.slackNotify
-      previewUrlAsComment = config.deploy.onSuccess.previewUrlAsComment
-      purgePreviewDeployments = config.deploy.pullRequest.onClose.purgePreviewDeployments
-      testStageTasks = config.test.tasks
+      return {
+        slackNotifyOnSuccess: config.deploy.onSuccess.slackNotify || false,
+        slackNotifyOnFailure: config.deploy.onFailure.slackNotify || false,
+        previewUrlAsComment: config.deploy.onSuccess.previewUrlAsComment || false,
+        // TODO purge Preview deploys
+        purgePreviewDeployments: config.deploy.pullRequest.onClose.purgePreviewDeployments || false,
+        testStageTasks: config.test.tasks || false
+      }
     })
     .catch(err => { throw err })
 }
