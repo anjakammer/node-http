@@ -22,13 +22,15 @@ events.on('pull_request', prClosed) // TODO
 
 async function prClosed (e, p) {
   webhook = JSON.parse(e.payload)
+  console.log(webhook)
+
   if (webhook.body.action === 'closed') {
     console.log('PullRequest closed')
     let config = await parseConfig()
     if (config.purgePreviewDeployments) {
       console.log('Dummy function - whooo purging') // TODO
       secrets = p.secrets
-      prNr = webhook.body.check_suite.pull_requests[0].number
+      prNr = webhook.body.number
       return new CommentPR(`Deleted all Previews for PullRequest: ${prNr}`).run()
     }
   }
