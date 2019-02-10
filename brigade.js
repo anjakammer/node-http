@@ -17,9 +17,17 @@ let secrets = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
+// events.on('check_run:rerequested', checkRequested) // TODO
+events.on('pull_request:closed', prClosed) // TODO
+
+async function prClosed (e, p) {
+  console.log('PullRequest closed')
+  console.log('Dummy function - whooo')
+  return CommentPR.run(`Deleted all Previews for PullRequest: ${prNr}`)
+}
 
 async function checkRequested (e, p) {
-  console.log('Check-Suite requested')
+  console.log('Check Suite requested')
   payload = e.payload
   webhook = JSON.parse(payload)
   secrets = p.secrets
@@ -30,7 +38,7 @@ async function checkRequested (e, p) {
     prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
     let config = await parseConfig()
     return runCheckSuite(config)
-      .then(() => { return console.log('Finished Check-Suite') })
+      .then(() => { return console.log('Finished Check Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
     return rerequestCheckSuite() // TODO debug this
@@ -78,18 +86,6 @@ async function runCheckSuite (config) {
     `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
-  const repo = webhook.body.repository.full_name
-  const prCommenter = new Job('pr-comment', 'anjakammer/brigade-pr-comment')
-  prCommenter.storage.enabled = false
-  prCommenter.useSource = false
-  prCommenter.env = {
-    APP_NAME: secrets.ghAppName,
-    WAIT_MS: '0',
-    COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
-    COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
-    TOKEN: webhook.token
-  }
-
   let result
 
   try {
@@ -112,7 +108,7 @@ async function runCheckSuite (config) {
   try {
     result = await deploy.run()
     sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-    if (!prodDeploy && config.previewUrlAsComment) { prCommenter.run() }
+    if (!prodDeploy && config.previewUrlAsComment) { CommentPR.run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`) }
     if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
   } catch (err) {
     if (config.slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
@@ -138,6 +134,22 @@ class RegisterCheck extends Job {
       CHECK_NAME: check,
       CHECK_TITLE: 'Description',
       CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
+}
+
+class CommentPR extends Job {
+  constructor (message) {
+    const repo = webhook.body.repository.full_name
+    super('pr-comment', 'anjakammer/brigade-pr-comment')
+    this.storage.enabled = false
+    this.useSource = false
+    this.env = {
+      APP_NAME: secrets.ghAppName,
+      WAIT_MS: '0',
+      COMMENT: message,
+      COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
+      TOKEN: webhook.token
     }
   }
 }
