@@ -24,7 +24,7 @@ async function prClosed (e, p) {
   console.log('PullRequest closed')
   let config = await parseConfig()
   if (config.purgePreviewDeployments) {
-    console.log('Dummy function - whooo purging')
+    console.log('Dummy function - whooo purging') // TODO
     webhook = JSON.parse(e.payload)
     secrets = p.secrets
     prNr = webhook.body.check_suite.pull_requests[0].number
@@ -56,41 +56,54 @@ async function runCheckSuite (config) {
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
+
+  await runBuildStage(imageName)
+  await runTestStage(imageName, config.testStageTasks)
+  await runDeployStage(config, appName, imageName, imageTag)
+}
+
+async function runBuildStage (imageName) {
+  return new Build(imageName).run()
+    .then((result) =>
+      new SendSignal({ stage: buildStage, logs: result.toString(), conclusion: success }).run())
+    .catch((err) =>
+      Group.runEach([
+        new SendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure }),
+        new SendSignal({ stage: testStage, logs: '', conclusion: cancelled }),
+        new SendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+      ]))
+}
+
+async function runTestStage (imageName, testStageTasks) {
+  return new Test(testStageTasks, imageName).run()
+    .then((result) =>
+      new SendSignal({ stage: testStage, logs: result.toString(), conclusion: success }).run())
+    .catch((err) =>
+      Group.runEach([
+        new SendSignal({ stage: testStage, logs: err.toString(), conclusion: failure }),
+        new SendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
+      ]))
+}
+
+async function runDeployStage (config, appName, imageName, imageTag) {
   const targetPort = 8080 // TODO fetch this from dockerfile
   const host = prodDeploy ? secrets.prodHost : secrets.prevHost
   const path = prodDeploy ? secrets.prodPath : `/preview/${appName}/${imageTag}`
   const url = `${host}${path}`
-
-  let result
-
-  try {
-    result = await new Build(imageName).run()
-  } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  }
-  sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
-
-  try {
-    result = await new Test(config.testStageTasks, imageName).run()
-  } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
-  }
-  sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
-
-  try {
-    result = await new Deploy(appName, imageName, imageTag, targetPort, host, path, url).run()
-  } catch (err) {
-    if (config.slackNotifyOnFailure) { slackNotify(`Failed Deployment of ${appName}`, imageName) }
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
-  }
-  sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-  if (!prodDeploy && config.previewUrlAsComment) {
-    new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`).run()
-  }
-  if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
+  return new Deploy(appName, imageName, imageTag, targetPort, host, path, url).run()
+    .then((result) => {
+      new SendSignal({ stage: deployStage, logs: result.toString(), conclusion: success }).run()
+      if (!prodDeploy && config.previewUrlAsComment) {
+        new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`).run()
+      }
+      if (config.slackNotifyOnSuccess) {
+        new SlackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`).run()
+      }
+    })
+    .catch((err) => {
+      if (config.slackNotifyOnFailure) { new SlackNotify(`Failed Deployment of ${appName}`, imageName).run() }
+      return new SendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure }).run()
+    })
 }
 
 async function parseConfig () {
@@ -106,12 +119,30 @@ async function parseConfig () {
         slackNotifyOnSuccess: config.deploy.onSuccess.slackNotify || false,
         slackNotifyOnFailure: config.deploy.onFailure.slackNotify || false,
         previewUrlAsComment: config.deploy.onSuccess.previewUrlAsComment || false,
-        // TODO purge Preview deploys
         purgePreviewDeployments: config.deploy.pullRequest.onClose.purgePreviewDeployments || false,
         testStageTasks: config.test.tasks || false
       }
     })
     .catch(err => { throw err })
+}
+
+function rerequestCheckSuite () {
+  console.log('No PR-id found. Will re-request the check_suite.')
+  request({
+    uri: `${webhook.body.check_suite.url}/rerequest`,
+    json: true,
+    headers: {
+      'Authorization': `token ${webhook.token}`,
+      'User-Agent': secrets.ghAppName,
+      'Accept': 'application/vnd.github.antiope-preview+json'
+    },
+    method: 'POST'
+  }).on('response', function (response) {
+    console.log(response.statusCode)
+    console.log(response.statusMessage)
+  }).on('error', function (err) {
+    console.log(err)
+  })
 }
 
 function registerCheckSuite () {
@@ -195,55 +226,37 @@ class CommentPR extends Job {
   }
 }
 
-function sendSignal ({ stage, logs, conclusion }) {
-  const assertResult = new Job(`result-of-${stage}`.toLowerCase(), checkRunImage)
-  assertResult.storage.enabled = false
-  assertResult.useSource = false
-  assertResult.env = {
-    CHECK_PAYLOAD: payload,
-    CHECK_NAME: stage,
-    CHECK_TITLE: 'Description'
+class SlackNotify extends Job {
+  constructor (title, message) {
+    super('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
+    this.storage.enabled = false
+    this.useSource = false
+    this.env = {
+      SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
+      SLACK_CHANNEL: secrets.SLACK_CHANNEL,
+      SLACK_USERNAME: 'anya',
+      SLACK_TITLE: title,
+      SLACK_MESSAGE: message,
+      SLACK_COLOR: '#23B5AF',
+      SLACK_ICON: 'https://storage.googleapis.com/anya-deployment/anya-logo.png'
+    }
   }
-  assertResult.env.CHECK_CONCLUSION = conclusion
-  assertResult.env.CHECK_SUMMARY = `${stage} ${conclusion}`
-  assertResult.env.CHECK_TEXT = logs
-  return assertResult.run()
-    .catch(err => { console.log(err) })
 }
 
-function rerequestCheckSuite () {
-  console.log('No PR-id found. Will re-request the check_suite.')
-  request({
-    uri: `${webhook.body.check_suite.url}/rerequest`,
-    json: true,
-    headers: {
-      'Authorization': `token ${webhook.token}`,
-      'User-Agent': secrets.ghAppName,
-      'Accept': 'application/vnd.github.antiope-preview+json'
-    },
-    method: 'POST'
-  }).on('response', function (response) {
-    console.log(response.statusCode)
-    console.log(response.statusMessage)
-  }).on('error', function (err) {
-    console.log(err)
-  })
-}
-
-function slackNotify (title, message) {
-  const slack = new Job('slack-notify', 'technosophos/slack-notify:latest', ['/slack-notify'])
-  slack.storage.enabled = false
-  slack.useSource = false
-  slack.env = {
-    SLACK_WEBHOOK: secrets.SLACK_WEBHOOK,
-    SLACK_CHANNEL: secrets.SLACK_CHANNEL,
-    SLACK_USERNAME: 'anya',
-    SLACK_TITLE: title,
-    SLACK_MESSAGE: message,
-    SLACK_COLOR: '#23B5AF',
-    SLACK_ICON: 'https://storage.googleapis.com/anya-deployment/anya-logo.png'
+class SendSignal extends Job {
+  constructor ({ stage, logs, conclusion }) {
+    super(`result-of-${stage}`.toLowerCase(), checkRunImage)
+    this.storage.enabled = false
+    this.useSource = false
+    this.env = {
+      CHECK_PAYLOAD: payload,
+      CHECK_NAME: stage,
+      CHECK_TITLE: 'Description'
+    }
+    this.env.CHECK_CONCLUSION = conclusion
+    this.env.CHECK_SUMMARY = `${stage} ${conclusion}`
+    this.env.CHECK_TEXT = logs
   }
-  slack.run()
 }
 
-module.exports = { parseConfig, registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite, slackNotify }
+module.exports = { parseConfig, registerCheckSuite, runCheckSuite, rerequestCheckSuite, runBuildStage, runTestStage, runDeployStage }
