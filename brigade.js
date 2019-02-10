@@ -39,7 +39,6 @@ async function checkRequested (e, p) {
 
 async function runCheckSuite (config) {
   registerCheckSuite()
-  return console.log(config)
   const appName = webhook.body.repository.name
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
