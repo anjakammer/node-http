@@ -96,30 +96,30 @@ async function runCheckSuite (config) {
 
   try {
     result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
   } catch (err) {
     await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
     await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
+  sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
 
   try {
     result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
+  sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
 
   try {
     result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-    if (!prodDeploy && config.previewUrlAsComment) { new CommentPR().run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`) }
-    if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
   } catch (err) {
-    if (config.slackNotifyOnFailure) { slackNotify(`Failed Deploymentof ${appName}`, imageName) }
+    if (config.slackNotifyOnFailure) { slackNotify(`Failed Deployment of ${appName}`, imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
+  sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
+  if (!prodDeploy && config.previewUrlAsComment) { new CommentPR().run(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`) }
+  if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
 }
 
 function registerCheckSuite () {
