@@ -17,9 +17,23 @@ let secrets = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
+// events.on('check_run:rerequested', checkRequested) // TODO
+events.on('pull_request:closed', prClosed) // TODO
+
+async function prClosed (e, p) {
+  console.log('PullRequest closed')
+  let config = await parseConfig()
+  if (config.purgePreviewDeployments) {
+    console.log('Dummy function - whooo')
+    webhook = JSON.parse(e.payload)
+    secrets = p.secrets
+    prNr = webhook.body.check_suite.pull_requests[0].number
+    return new CommentPR(`Deleted all Previews for PullRequest: ${prNr}`).run()
+  }
+}
 
 async function checkRequested (e, p) {
-  console.log('Check-Suite requested')
+  console.log('Check Suite requested')
   payload = e.payload
   webhook = JSON.parse(payload)
   secrets = p.secrets
@@ -30,7 +44,7 @@ async function checkRequested (e, p) {
     prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
     let config = await parseConfig()
     return runCheckSuite(config)
-      .then(() => { return console.log('Finished Check-Suite') })
+      .then(() => { return console.log('Finished Check Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
     return rerequestCheckSuite() // TODO debug this
@@ -78,46 +92,37 @@ async function runCheckSuite (config) {
     `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
-  const repo = webhook.body.repository.full_name
-  const prCommenter = new Job('pr-comment', 'anjakammer/brigade-pr-comment')
-  prCommenter.storage.enabled = false
-  prCommenter.useSource = false
-  prCommenter.env = {
-    APP_NAME: secrets.ghAppName,
-    WAIT_MS: '0',
-    COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
-    COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
-    TOKEN: webhook.token
-  }
-
   let result
 
   try {
     result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
   } catch (err) {
     await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
     await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
+  sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
 
   try {
     result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
   } catch (err) {
     await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
     return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
+  sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
 
   try {
     result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
-    if (!prodDeploy && config.previewUrlAsComment) { prCommenter.run() }
-    if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
   } catch (err) {
-    if (config.slackNotifyOnFailure) { slackNotify('Failed Deployment', imageName) }
+    if (config.slackNotifyOnFailure) { slackNotify(`Failed Deployment of ${appName}`, imageName) }
     return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
+  sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
+  if (!prodDeploy && config.previewUrlAsComment) {
+    const prComment = new CommentPR(`Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`)
+    prComment.run()
+  }
+  if (config.slackNotifyOnSuccess) { slackNotify(`Successful Deployment of ${appName}`, `<https://${url}>`) }
 }
 
 function registerCheckSuite () {
@@ -138,6 +143,22 @@ class RegisterCheck extends Job {
       CHECK_NAME: check,
       CHECK_TITLE: 'Description',
       CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
+}
+
+class CommentPR extends Job {
+  constructor (message) {
+    const repo = webhook.body.repository.full_name
+    super('pr-comment', 'anjakammer/brigade-pr-comment')
+    this.storage.enabled = false
+    this.useSource = false
+    this.env = {
+      APP_NAME: secrets.ghAppName,
+      WAIT_MS: '0',
+      COMMENT: message,
+      COMMENTS_URL: `https://api.github.com/repos/${repo}/issues/${prNr}/comments`,
+      TOKEN: webhook.token
     }
   }
 }
