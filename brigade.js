@@ -155,10 +155,10 @@ async function parseConfig () {
   parse.run()
     .then((result) => {
       config = result.toString()
+      console.log(config)
       config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
       slackNotifyOnSuccess = true // TODO
       slackNotifyOnFailure = true // TODO
-      console.log(config)
     })
     .catch(err => { throw err })
 }
