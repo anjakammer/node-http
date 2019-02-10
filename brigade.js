@@ -8,55 +8,45 @@ const deployStage = '3-Deploy'
 const failure = 'failure'
 const cancelled = 'cancelled'
 const success = 'success'
+
 let prodDeploy = false
 let prNr = 0
 let config = ''
+let payload = ''
+let webhook = ''
+let secrets = ''
 
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 
 async function checkRequested (e, p) {
   console.log('Check-Suite requested')
-  const payload = JSON.parse(e.payload)
-  const pr = payload.body.check_suite.pull_requests
-  prodDeploy = payload.body.check_suite.head_branch === p.secrets.prodBranch
+  payload = e.payload
+  webhook = JSON.parse(payload)
+  secrets = p.secrets
+
+  const pr = webhook.body.check_suite.pull_requests
+  prodDeploy = webhook.body.check_suite.head_branch === secrets.prodBranch
   if (pr.length !== 0 || prodDeploy) {
-    prNr = pr.length !== 0 ? payload.body.check_suite.pull_requests[0].number : 0
-    await parseConfig(e.payload)
-    runCheckSuite(e.payload, p.secrets)
+    prNr = pr.length !== 0 ? webhook.body.check_suite.pull_requests[0].number : 0
+    await parseConfig()
+    runCheckSuite()
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
-  } else if (payload.body.action !== 'rerequested') {
-    rerequestCheckSuite(payload.body.check_suite.url, payload.token, p.secrets.ghAppName)
+  } else if (webhook.body.action !== 'rerequested') {
+    rerequestCheckSuite(webhook.body.check_suite.url, webhook.token, secrets.ghAppName)
   }
 }
 
-async function parseConfig (payload) {
-  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
-  parse.env.DIR = '/src/anya'
-  parse.env.EXT = '.yaml'
-  parse.imageForcePull = true
-  parse.run()
-    .then((result) => {
-      config = result.toString()
-      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
-      console.log(config)
-    })
-    .catch(err => { throw err })
-}
-
-async function runCheckSuite (payload, secrets) {
-  registerCheckSuite(payload)
-  const webhook = JSON.parse(payload).body
-  const appName = webhook.repository.name
-  const imageTag = (webhook.check_suite.head_sha).slice(0, 7)
+async function runCheckSuite () {
+  registerCheckSuite()
+  const appName = webhook.body.repository.name
+  const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
   const build = new Job(buildStage.toLowerCase(), 'docker:stable-dind')
   build.privileged = true
-  build.env = {
-    DOCKER_DRIVER: 'overlay'
-  }
+  build.env.DOCKER_DRIVER = 'overlay'
   build.tasks = [
     'dockerd-entrypoint.sh > /dev/null 2>&1 &',
     'sleep 20',
@@ -92,7 +82,7 @@ async function runCheckSuite (payload, secrets) {
     `echo "URL: <a href="https://${url}" target="_blank">${url}</a>"`
   ]
 
-  const repo = webhook.repository.full_name
+  const repo = webhook.body.repository.full_name
   const commentsUrl = `https://api.github.com/repos/${repo}/issues/${prNr}/comments`
   const prCommenter = new Job('4-pr-comment', 'anjakammer/brigade-pr-comment')
   prCommenter.useSource = false
@@ -101,46 +91,73 @@ async function runCheckSuite (payload, secrets) {
     WAIT_MS: '0',
     COMMENT: `Preview Environment is set up: <a href="https://${url}" target="_blank">${url}</a>`,
     COMMENTS_URL: commentsUrl,
-    TOKEN: JSON.parse(payload).token
+    TOKEN: webhook.token
   }
 
   let result
 
   try {
     result = await build.run()
-    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success, payload })
+    sendSignal({ stage: buildStage, logs: result.toString(), conclusion: success })
   } catch (err) {
-    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure, payload })
-    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+    await sendSignal({ stage: buildStage, logs: err.toString(), conclusion: failure })
+    await sendSignal({ stage: testStage, logs: '', conclusion: cancelled })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
 
   try {
     result = await test.run()
-    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success, payload })
+    sendSignal({ stage: testStage, logs: result.toString(), conclusion: success })
   } catch (err) {
-    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure, payload })
-    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled, payload })
+    await sendSignal({ stage: testStage, logs: err.toString(), conclusion: failure })
+    return sendSignal({ stage: deployStage, logs: '', conclusion: cancelled })
   }
 
   try {
     result = await deploy.run()
-    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success, payload })
+    sendSignal({ stage: deployStage, logs: result.toString(), conclusion: success })
     if (!prodDeploy) { prCommenter.run() }
   } catch (err) {
-    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure, payload })
+    return sendSignal({ stage: deployStage, logs: err.toString(), conclusion: failure })
   }
 }
 
-function registerCheckSuite (payload) {
+function registerCheckSuite () {
   return Group.runEach([
-    new RegisterCheck(buildStage, payload),
-    new RegisterCheck(testStage, payload),
-    new RegisterCheck(deployStage, payload)
+    new RegisterCheck(buildStage),
+    new RegisterCheck(testStage),
+    new RegisterCheck(deployStage)
   ]).catch(err => { console.log(err) })
 }
 
-function sendSignal ({ stage, logs, conclusion, payload }) {
+class RegisterCheck extends Job {
+  constructor (check) {
+    super(`register-${check}`.toLowerCase(), checkRunImage)
+    this.useSource = false
+    this.env = {
+      CHECK_PAYLOAD: payload,
+      CHECK_NAME: check,
+      CHECK_TITLE: 'Description',
+      CHECK_SUMMARY: `${check} scheduled`
+    }
+  }
+}
+
+async function parseConfig () {
+  const parse = new Job('parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.env.DIR = '/src/anya'
+  parse.env.EXT = '.yaml'
+  parse.imageForcePull = true
+  parse.run()
+    .then((result) => {
+      config = result.toString()
+      config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
+      console.log(config)
+    })
+    .catch(err => { throw err })
+}
+
+function sendSignal ({ stage, logs, conclusion }) {
   const assertResult = new Job(`assert-result-of-${stage}-job`.toLowerCase(), checkRunImage)
   assertResult.imageForcePull = true
   assertResult.env = {
@@ -174,17 +191,4 @@ function rerequestCheckSuite (url, token, ghAppName) {
   })
 }
 
-class RegisterCheck extends Job {
-  constructor (check, payload) {
-    super(`register-${check}`.toLowerCase(), checkRunImage)
-    this.useSource = false
-    this.env = {
-      CHECK_PAYLOAD: payload,
-      CHECK_NAME: check,
-      CHECK_TITLE: 'Description',
-      CHECK_SUMMARY: `${check} scheduled`
-    }
-  }
-}
-
-module.exports = { registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
+module.exports = { parseConfig, registerCheckSuite, runCheckSuite, sendSignal, rerequestCheckSuite }
