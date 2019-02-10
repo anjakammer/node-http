@@ -18,17 +18,19 @@ let secrets = ''
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 events.on('check_run:rerequested', checkRequested)
-events.on('pull_request:closed', prClosed) // TODO
+events.on('pull_request', prClosed) // TODO
 
 async function prClosed (e, p) {
-  console.log('PullRequest closed')
-  let config = await parseConfig()
-  if (config.purgePreviewDeployments) {
-    console.log('Dummy function - whooo purging') // TODO
-    webhook = JSON.parse(e.payload)
-    secrets = p.secrets
-    prNr = webhook.body.check_suite.pull_requests[0].number
-    return new CommentPR(`Deleted all Previews for PullRequest: ${prNr}`).run()
+  webhook = JSON.parse(e.payload)
+  if (webhook.body.action === 'closed') {
+    console.log('PullRequest closed')
+    let config = await parseConfig()
+    if (config.purgePreviewDeployments) {
+      console.log('Dummy function - whooo purging') // TODO
+      secrets = p.secrets
+      prNr = webhook.body.check_suite.pull_requests[0].number
+      return new CommentPR(`Deleted all Previews for PullRequest: ${prNr}`).run()
+    }
   }
 }
 
