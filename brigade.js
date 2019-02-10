@@ -148,7 +148,7 @@ async function parseConfig () {
   parse.imageForcePull = true
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
-  parse.run()
+  return parse.run()
     .then((result) => {
       let config = result.toString()
       config = JSON.parse(config.substring(config.indexOf('{') - 1, config.lastIndexOf('}') + 1))
