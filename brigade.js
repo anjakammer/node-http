@@ -36,7 +36,7 @@ async function checkRequested (e, p) {
       .then(() => { return console.log('Finished Check-Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
-    rerequestCheckSuite() // TODO debug this
+    return rerequestCheckSuite() // TODO debug this
   }
 }
 
@@ -150,6 +150,7 @@ class RegisterCheck extends Job {
 
 async function parseConfig () {
   const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
+  parse.imageForcePull = true
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
   parse.run()
