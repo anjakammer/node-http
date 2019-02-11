@@ -109,7 +109,6 @@ async function runDeployStage (config, appName, imageName, imageTag) {
 
 async function parseConfig () {
   const parse = new Job('0-parse-yaml', 'anjakammer/yaml-parser:latest')
-  parse.imageForcePull = true
   parse.env.DIR = '/src/anya'
   parse.env.EXT = '.yaml'
   return parse.run()
@@ -130,6 +129,7 @@ async function parseConfig () {
 function rerequestCheckSuite () {
   console.log('No PR-id found. Will re-request the check_suite.')
   const rerequest = new Job('rerequest-check-suite', 'anjakammer/post2_github-checks:latest')
+  rerequest.imageForcePull = true // TODO delete this if works
   rerequest.storage.enabled = false
   rerequest.useSource = false
   rerequest.env = {
