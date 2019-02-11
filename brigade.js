@@ -137,7 +137,7 @@ function rerequestCheckSuite () {
     APP_NAME: secrets.ghAppName,
     TOKEN: webhook.token
   }
-  return setTimeout(() => {
+  setTimeout(() => {
     rerequest.run().catch(err => { console.log(err) })
   }, 30000) // wait 30 Sec.
 }
