@@ -48,7 +48,7 @@ async function checkRequested (e, p) {
       .then(() => { return console.log('Finished Check Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
-    return rerequestCheckSuite()
+    rerequestCheckSuite()
   }
 }
 
