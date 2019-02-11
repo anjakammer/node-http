@@ -1,5 +1,4 @@
 const { events, Job, Group } = require('brigadier')
-const request = require('request')
 
 const checkRunImage = 'deis/brigade-github-check-run:latest'
 const buildStage = '1-Build'
@@ -18,7 +17,7 @@ let secrets = ''
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 events.on('check_run:rerequested', checkRequested)
-events.on('pull_request', prClosed) // TODO action not definable
+// events.on('pull_request', prClosed) // TODO action not definable
 
 async function prClosed (e, p) { // TODO webhook does not have the token
   webhook = JSON.parse(e.payload)
@@ -130,7 +129,7 @@ async function parseConfig () {
 
 function rerequestCheckSuite () {
   console.log('No PR-id found. Will re-request the check_suite.')
-  const rerequest = new Job('rerequest-check_suite', 'anjakammer/post2_github-checks:latest')
+  const rerequest = new Job('rerequest-check-suite', 'anjakammer/post2_github-checks:latest')
   rerequest.storage.enabled = false
   rerequest.useSource = false
   rerequest.env = {
