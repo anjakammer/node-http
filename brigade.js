@@ -18,12 +18,10 @@ let secrets = ''
 events.on('check_suite:requested', checkRequested)
 events.on('check_suite:rerequested', checkRequested)
 events.on('check_run:rerequested', checkRequested)
-events.on('pull_request', prClosed) // TODO
+events.on('pull_request', prClosed) // TODO action not definable
 
-async function prClosed (e, p) {
+async function prClosed (e, p) { // TODO webhook does not have the token
   webhook = JSON.parse(e.payload)
-  console.log(webhook)
-
   if (webhook.body.action === 'closed') {
     console.log('PullRequest closed')
     let config = await parseConfig()
@@ -51,7 +49,7 @@ async function checkRequested (e, p) {
       .then(() => { return console.log('Finished Check Suite') })
       .catch((err) => { console.log(err) })
   } else if (webhook.body.action !== 'rerequested') {
-    return setTimeout(() => { rerequestCheckSuite() }, 30000) // wait 30 Sec.
+    return rerequestCheckSuite()
   }
 }
 
@@ -61,9 +59,9 @@ async function runCheckSuite (config) {
   const imageTag = (webhook.body.check_suite.head_sha).slice(0, 7)
   const imageName = `${secrets.DOCKER_REPO}/${appName}:${imageTag}`
 
-  await runBuildStage(imageName)
-  await runTestStage(imageName, config.testStageTasks)
-  await runDeployStage(config, appName, imageName, imageTag)
+  // await runBuildStage(imageName)
+  // await runTestStage(imageName, config.testStageTasks)
+  // await runDeployStage(config, appName, imageName, imageTag)
 }
 
 async function runBuildStage (imageName) {
@@ -132,21 +130,17 @@ async function parseConfig () {
 
 function rerequestCheckSuite () {
   console.log('No PR-id found. Will re-request the check_suite.')
-  request({
-    uri: `${webhook.body.check_suite.url}/rerequest`,
-    json: true,
-    headers: {
-      'Authorization': `token ${webhook.token}`,
-      'User-Agent': secrets.ghAppName,
-      'Accept': 'application/vnd.github.antiope-preview+json'
-    },
-    method: 'POST'
-  }).on('response', function (response) {
-    console.log(response.statusCode)
-    console.log(response.statusMessage)
-  }).on('error', function (err) {
-    console.log(err)
-  })
+  const rerequest = new Job('rerequest-check_suite', 'anjakammer/post2_github-checks:latest')
+  rerequest.storage.enabled = false
+  rerequest.useSource = false
+  rerequest.env = {
+    URL: `${webhook.body.check_suite.url}/rerequest`,
+    APP_NAME: secrets.ghAppName,
+    TOKEN: webhook.token
+  }
+  return setTimeout(() => {
+    rerequest.run().catch(err => { console.log(err) })
+  }, 30000) // wait 30 Sec.
 }
 
 function registerCheckSuite () {
