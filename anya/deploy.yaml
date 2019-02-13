@@ -1,3 +1,5 @@
+automaticDeployment: false
+
 onSuccess:
   slackNotify: true
   previewUrlAsComment: true
