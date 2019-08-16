@@ -1,4 +1,4 @@
-automaticDeployment: false
+automaticDeployment: true
 
 onSuccess:
   slackNotify: true
