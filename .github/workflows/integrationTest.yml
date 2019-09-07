@@ -1,5 +1,5 @@
 name: "Integration Testing with KinD"
-on: repository_dispatch
+on: push
 
 jobs:
   kind:
@@ -12,3 +12,11 @@ jobs:
         export KUBECONFIG="$(kind get kubeconfig-path)"
         kubectl cluster-info
         kubectl get pods -n kube-system
+        export HELM_PLATFORM=linux-amd64 && export HELM_VERSION=helm-v2.14.3
+        wget https://get.helm.sh/$HELM_VERSION-$HELM_PLATFORM.tar.gz && tar -xvzf $HELM_VERSION-$HELM_PLATFORM.tar.gz && rm -rf $HELM_VERSION-$HELM_PLATFORM.tar.gz && mv $HELM_PLATFORM/helm $GOBIN/helm3 && chmod +x $GOBIN/helm3
+        helm init
+        helm repo add anya https://storage.googleapis.com/anya-deployment/charts
+        helm upgrade --install node-http anya/deployment-template --set-string \
+        image.repository=anjakammer/node-http,image.tag=latest \
+        service.targetPort=8080,\ nameOverride=node-http,fullnameOverride=node-http
+       
