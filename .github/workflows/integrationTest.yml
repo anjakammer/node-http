@@ -1,5 +1,5 @@
 name: "Integration Testing with KinD"
-on: [push]
+on: [integration_test]
 
 jobs:
   kind:
