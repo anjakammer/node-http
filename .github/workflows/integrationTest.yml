@@ -15,6 +15,9 @@ jobs:
         wget https://get.helm.sh/$HELM_VERSION-$HELM_PLATFORM.tar.gz && tar -xvzf $HELM_VERSION-$HELM_PLATFORM.tar.gz \
         && rm -rf $HELM_VERSION-$HELM_PLATFORM.tar.gz && mv $HELM_PLATFORM/helm $GOBIN/helm && chmod +x $GOBIN/helm
         helm init --wait
+        kubectl --namespace kube-system create serviceaccount tiller
+        kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+        kubectl --namespace kube-system patch deploy tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
         helm repo add anya https://storage.googleapis.com/anya-deployment/charts
         helm upgrade --install node-http anya/deployment-template --namespace default --set-string image.repository=anjakammer/node-http,image.tag=latest,service.targetPort=8080,nameOverride=node-http,fullnameOverride=node-http
         kubectl get pods -n default
