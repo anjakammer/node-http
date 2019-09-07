@@ -1,5 +1,5 @@
 name: "Integration Testing with KinD"
-on: [integration_test]
+on: [repository_dispatch]
 
 jobs:
   kind:
