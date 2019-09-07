@@ -1,6 +1,5 @@
 name: "Integration Testing with KinD"
 on: repository_dispatch
-  types: integration_test
 
 jobs:
   kind:
