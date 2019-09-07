@@ -1,0 +1,14 @@
+name: "Integration Testing with KinD"
+on: [pull_request, push]
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: engineerd/setup-kind@v0.1.0
+    - name: Testing
+      run: |
+        export KUBECONFIG="$(kind get kubeconfig-path)"
+        kubectl cluster-info
+        kubectl get pods -n kube-system
