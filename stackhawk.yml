@@ -1,4 +1,5 @@
 # stackhawk configuration for node-http
+# run locally with "docker run -e API_KEY=${HAWK_API_KEY} --rm -v $(pwd):/hawk:rw -it stackhawk/hawkscan:latest"
 app:
   # An applicationId obtained from the StackHawk platform.
   applicationId: d9a8a2ea-8adc-4902-8eb1-e9664f67b141 # (required)
