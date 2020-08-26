@@ -5,10 +5,14 @@
   "main": "server.js",
   "dependencies": {
     "chai": "4.1.1",
-    "mocha": "7.1.1"
+    "mocha": "7.1.1",
+    "snyk": "^1.385.0"
   },
   "scripts": {
     "test": "mocha",
-    "start": "node server.js"
-  }
+    "start": "node server.js",
+    "snyk-protect": "snyk protect",
+    "prepare": "npm run snyk-protect"
+  },
+  "snyk": true
 }
