@@ -1,4 +1,4 @@
-var expect = require('chai').expect
+let expect = require('chai').expect
 
 describe('Host', function () {
   it('should be reachable via localhost', function () {
@@ -17,7 +17,6 @@ describe('Port', function () {
     expect(true).to.be.equal(true)
   })
 })
-
 
 describe('Root path', function () {
   it('should deliver logo', function () {
