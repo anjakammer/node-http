@@ -1,4 +1,4 @@
-let expect = require('chai').expect
+const expect = require('chai').expect
 
 describe('Host', function () {
   it('should be reachable via localhost', function () {
