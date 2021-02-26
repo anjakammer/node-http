@@ -4,7 +4,7 @@
   "description": "Simple Hello World that listens on localhost:8080",
   "main": "server.js",
   "dependencies": {
-    "chai": "4.2.0",
+    "chai": "4.3.0",
     "mocha": "8.2.1"
   },
   "scripts": {
