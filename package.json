@@ -5,7 +5,7 @@
   "main": "server.js",
   "dependencies": {
     "chai": "4.2.0",
-    "mocha": "8.2.1"
+    "mocha": "8.3.0"
   },
   "scripts": {
     "test": "mocha",
