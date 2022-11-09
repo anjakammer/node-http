@@ -1,4 +1,4 @@
-FROM node:9-slim
+FROM node:19-slim
 ENV PORT 8080
 EXPOSE 8080
 
